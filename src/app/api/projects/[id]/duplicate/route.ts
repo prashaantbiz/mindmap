@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions, getOrCreateAuthenticatedUser } from "@/lib/auth";
 import { db } from "@/lib/prisma";
 
 export async function POST(
@@ -13,10 +13,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = await db.user.findUnique({
-      where: { email: session.user.email.toLowerCase() },
-    });
-
+    const user = await getOrCreateAuthenticatedUser(session.user);
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }

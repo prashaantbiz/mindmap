@@ -194,7 +194,6 @@ export const authOptions: NextAuthOptions = {
         session.user.name = token.name as string;
         session.user.image = token.picture as string | null;
 
-        // Fetch user default workspace
         if (token.id) {
           const projects = await db.project.findMany({
             where: { userId: token.id as string },
@@ -207,3 +206,43 @@ export const authOptions: NextAuthOptions = {
     },
   },
 };
+
+export async function getOrCreateAuthenticatedUser(sessionUser: {
+  email?: string | null;
+  name?: string | null;
+  image?: string | null;
+  id?: string | null;
+}): Promise<StoredUser | null> {
+  if (!sessionUser?.email) return null;
+  const normalizedEmail = sessionUser.email.toLowerCase().trim();
+
+  let user = await db.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+
+  if (!user) {
+    user = await db.user.create({
+      data: {
+        name: sessionUser.name || normalizedEmail.split("@")[0],
+        email: normalizedEmail,
+        image: sessionUser.image || `https://api.dicebear.com/7.x/initials/svg?seed=${sessionUser.name || "User"}`,
+        emailVerified: new Date(),
+      },
+    });
+
+    // Auto-provision initial workspace
+    await db.project.create({
+      data: {
+        title: `${sessionUser.name || "My"}'s Mind Map`,
+        description: "Explore ideas, connect nodes, and organize your thoughts.",
+        nodeCount: 5,
+        folder: "Personal",
+        tags: ["Starter", "Ideas"],
+        isDefault: true,
+        userId: user.id,
+      },
+    });
+  }
+
+  return user;
+}
