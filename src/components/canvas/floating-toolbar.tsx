@@ -84,22 +84,22 @@ export function FloatingToolbar({
       aria-label="Mind Map Editing Toolbar"
       className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1 p-1.5 rounded-2xl border border-border/80 bg-card/95 backdrop-blur-md shadow-2xl shadow-black/10 dark:shadow-black/60 max-w-[calc(100vw-32px)] overflow-x-auto transition-all duration-150"
     >
-      {/* Add Child Node */}
+      {/* Add Arm (Child) Node */}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
             size="sm"
             variant="ghost"
             onClick={onAddChild}
-            aria-label="Add child node (Tab)"
+            aria-label="Add Arm (Tab)"
             className="h-8.5 px-2.5 text-xs font-semibold gap-1 text-foreground hover:text-primary hover:bg-primary/10 rounded-xl shrink-0"
           >
             <Plus className="h-4 w-4 text-primary" />
-            <span className="hidden sm:inline">Child (Tab)</span>
+            <span className="hidden sm:inline">Arm (Tab)</span>
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          <p>Add Child Node to selected branch (Tab)</p>
+          <p>Add Arm (Child branch) to selected idea (Tab)</p>
         </TooltipContent>
       </Tooltip>
 
@@ -110,7 +110,7 @@ export function FloatingToolbar({
             size="sm"
             variant="ghost"
             onClick={onAddSibling}
-            aria-label="Add sibling node (Enter)"
+            aria-label="Add Sibling (Enter)"
             className="h-8.5 px-2.5 text-xs font-semibold gap-1 text-foreground hover:text-primary hover:bg-primary/10 rounded-xl shrink-0"
           >
             <GitBranch className="h-4 w-4 text-muted-foreground" />
@@ -118,7 +118,7 @@ export function FloatingToolbar({
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          <p>Add Sibling Node at current level (Enter)</p>
+          <p>Add Sibling (same parent level) (Enter)</p>
         </TooltipContent>
       </Tooltip>
 

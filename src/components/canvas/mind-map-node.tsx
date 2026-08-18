@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
-import { Plus, Link2, ExternalLink } from "lucide-react";
+import { Link2, ExternalLink, Minus, Plus } from "lucide-react";
 import { parseMediaUrl } from "@/lib/media-parser";
 import { getFontClass } from "@/lib/fonts";
 import { FloatingNodeToolbar } from "./floating-node-toolbar";
@@ -29,7 +29,8 @@ export type MindMapNodeData = {
   fontStyle?: string | null;
   textAlign?: string | null;
   canvasFont?: string | null;
-  onAddChild?: (parentId: string, direction?: "right" | "left") => void;
+  onAddArm?: (parentId: string, direction?: "right" | "left") => void;
+  onAddSibling?: (nodeId: string) => void;
   onToggleCollapse?: (nodeId: string) => void;
   onUpdateText?: (nodeId: string, text: string, description?: string) => void;
   onUpdateNodeWidth?: (nodeId: string, width: number) => void;
@@ -103,7 +104,7 @@ export function MindMapNodeComponent({
   };
 
   // =========================================================================
-  // CORNER RESIZE DOT (MindMeister bottom-right circular grip)
+  // CORNER RESIZE DOT (Bottom-right circular grip)
   // =========================================================================
   const handlePointerDownCornerResize = (e: React.PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
@@ -152,7 +153,8 @@ export function MindMapNodeComponent({
   const nodeColor = data.color || "#0084ff";
   const isRoot = data.isRoot || !data.parentId;
   const childCount = data.childCount || 0;
-  const hasChildren = childCount > 0 || Boolean(data.collapsed);
+  // STRICT RULE: Only show collapse/expand if the node has at least one child
+  const hasChildren = childCount > 0;
 
   const fontClass = getFontClass(data.fontFamily || (data.canvasFont as string));
   const parsedVideo = parseMediaUrl(data.videoUrl);
@@ -168,7 +170,7 @@ export function MindMapNodeComponent({
           : ""
       } ${
         selected
-          ? "border-2 shadow-lg bg-card"
+          ? "border-2 shadow-lg bg-card ring-2 ring-primary/20"
           : "border-2 hover:shadow-md bg-card"
       } ${
         isRoot
@@ -180,7 +182,7 @@ export function MindMapNodeComponent({
         borderColor: selected ? nodeColor : isHovered ? nodeColor : "var(--border)",
       }}
     >
-      {/* Floating Contextual Toolbar above Node (MindMeister Style) */}
+      {/* Floating Contextual Toolbar above Node (Visible ONLY when selected) */}
       <FloatingNodeToolbar
         nodeId={id}
         selected={Boolean(selected)}
@@ -189,6 +191,7 @@ export function MindMapNodeComponent({
           description: data.description,
           color: data.color,
           isRoot: data.isRoot,
+          parentId: data.parentId,
           childCount: data.childCount,
           collapsed: data.collapsed,
           imageUrl: data.imageUrl,
@@ -199,7 +202,8 @@ export function MindMapNodeComponent({
           textAlign: data.textAlign,
         }}
         onUpdate={(updates) => data.onUpdateNodeData?.(id, updates)}
-        onAddChild={(dir) => data.onAddChild?.(id, dir)}
+        onAddArm={(dir) => data.onAddArm?.(id, dir)}
+        onAddSibling={() => data.onAddSibling?.(id)}
         onToggleCollapse={() => data.onToggleCollapse?.(id)}
         onDelete={() => data.onDeleteNode?.(id)}
         onDuplicate={() => data.onDuplicateNode?.(id)}
@@ -266,7 +270,7 @@ export function MindMapNodeComponent({
         </div>
       </div>
 
-      {/* ORIGINAL SIZE IMAGE ATTACHMENT: Resizes dynamically with the whole box */}
+      {/* Original Size Image Attachment */}
       {data.imageUrl && (
         <div className="mt-2 w-full rounded-xl overflow-hidden border border-border/60 bg-muted/10 pointer-events-none">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -278,7 +282,7 @@ export function MindMapNodeComponent({
         </div>
       )}
 
-      {/* Video Attachment (Embed or Native) */}
+      {/* Video Attachment */}
       {data.videoUrl && (
         <div className="mt-2 w-full rounded-xl overflow-hidden border border-border/60 bg-black/10">
           {parsedVideo?.type === "youtube" && parsedVideo.embedUrl ? (
@@ -335,7 +339,7 @@ export function MindMapNodeComponent({
       )}
 
       {/* ========================================================================= */}
-      {/* 1. MINDMEISTER RESIZE CORNER DOT (Exact bottom-right corner dot)          */}
+      {/* 1. CORNER RESIZE DOT (Bottom-right corner dot on selected node)          */}
       {/* ========================================================================= */}
       {selected && (
         <div
@@ -344,76 +348,41 @@ export function MindMapNodeComponent({
           onPointerUp={handlePointerUpCornerResize}
           className="nodrag nopan absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border-2 bg-white dark:bg-card cursor-nwse-resize z-30 shadow-xs hover:scale-150 active:scale-125 transition-transform"
           style={{ borderColor: nodeColor }}
-          title="Drag this corner dot to resize box and image"
+          title="Drag corner to resize box"
         />
       )}
 
       {/* ========================================================================= */}
-      {/* 2. MINDMEISTER COLLAPSE / EXPAND RING DOT (On branch connector line)     */}
+      {/* 2. COLLAPSE / EXPAND CONTROL (Only if node HAS children)                  */}
       {/* ========================================================================= */}
       {hasChildren && (
         <div
+          className="nodrag nopan group/collapse absolute -right-7 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center cursor-pointer z-30"
           onClick={(e) => {
             e.stopPropagation();
             data.onToggleCollapse?.(id);
           }}
-          className="nodrag nopan group/dot absolute -right-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 bg-white dark:bg-card cursor-pointer hover:scale-125 transition-transform flex items-center justify-center shadow-xs z-30"
-          style={{ borderColor: nodeColor }}
         >
-          {/* Inner solid dot if collapsed (Image 3), hollow if expanded (Image 2) */}
-          {data.collapsed && (
-            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: nodeColor }} />
-          )}
+          <div
+            className={`w-5 h-5 rounded-full border bg-card text-foreground flex items-center justify-center shadow-md transition-all duration-150 ${
+              selected || isHovered
+                ? "opacity-100 scale-100"
+                : "opacity-40 hover:opacity-100 hover:scale-110"
+            }`}
+            style={{ borderColor: nodeColor }}
+            title={data.collapsed ? "Expand branch (Space)" : "Collapse branch (Space)"}
+          >
+            {data.collapsed ? (
+              <Plus className="h-3 w-3 stroke-[2.5]" style={{ color: nodeColor }} />
+            ) : (
+              <Minus className="h-3 w-3 stroke-[2.5]" style={{ color: nodeColor }} />
+            )}
+          </div>
 
-          {/* Tooltip (Collapse / Expand) */}
-          <div className="absolute top-[calc(100%+4px)] left-1/2 -translate-x-1/2 opacity-0 group-hover/dot:opacity-100 transition-opacity pointer-events-none bg-[#2d3139] text-white text-[11px] font-medium px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-50">
+          {/* Dark Tooltip */}
+          <div className="absolute top-[calc(100%+4px)] left-1/2 -translate-x-1/2 opacity-0 group-hover/collapse:opacity-100 transition-opacity pointer-events-none bg-[#2d3139] text-white text-[11px] font-medium px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-50">
             {data.collapsed ? "Expand" : "Collapse"}
           </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 3. MINDMEISTER PLUS (+) BUTTON & SHORTCUT HINTS (Exact match to Image 1) */}
-      {/* ========================================================================= */}
-      {(selected || isHovered) && (
-        <div className="nodrag nopan absolute -right-8 top-1/2 -translate-y-1/2 flex items-center gap-2 z-30">
-          {/* Plus Circle Button */}
-          <div className="group/plus relative">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                data.onAddChild?.(id, "right");
-              }}
-              className="w-6 h-6 rounded-full text-white flex items-center justify-center shadow-md cursor-pointer hover:scale-110 active:scale-95 transition-transform"
-              style={{ backgroundColor: nodeColor }}
-            >
-              <Plus className="h-4 w-4 stroke-[2.5]" />
-            </button>
-
-            {/* "Add child" Tooltip */}
-            <div className="absolute top-[calc(100%+4px)] left-1/2 -translate-x-1/2 opacity-0 group-hover/plus:opacity-100 transition-opacity pointer-events-none bg-[#2d3139] text-white text-[11px] font-medium px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-50">
-              Add child
-            </div>
-          </div>
-
-          {/* Keyboard Hint Badges (Image 1 & 3) */}
-          {selected && (
-            <div className="flex flex-col gap-1 pointer-events-none select-none shrink-0 whitespace-nowrap pl-1 animate-in fade-in duration-150">
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="px-1.5 py-0.5 rounded-md border border-border bg-card shadow-xs font-semibold text-[10px] text-foreground">
-                  Tab
-                </span>
-                <span>to create child</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="px-1.5 py-0.5 rounded-md border border-border bg-card shadow-xs font-semibold text-[10px] text-foreground">
-                  Enter
-                </span>
-                <span>to create sibling</span>
-              </div>
-            </div>
-          )}
         </div>
       )}
 

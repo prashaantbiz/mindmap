@@ -41,12 +41,10 @@ import { getFontClass } from "@/lib/fonts";
 import {
   Plus,
   GitBranch,
-  Edit3,
   Copy,
   Trash2,
   FoldHorizontal,
   UnfoldHorizontal,
-  Palette,
   AlertTriangle,
 } from "lucide-react";
 
@@ -326,8 +324,13 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     [nodes, edges]
   );
 
-  // 5. Node CRUD & Tree Operations
-  const handleAddChild = React.useCallback(
+  // =========================================================================
+  // 5. STRICT RULE ENFORCEMENT: ADD ARM VS ADD SIBLING
+  // =========================================================================
+
+  // ADD ARM: Creates a CHILD of the selected node (one level deeper).
+  // newNode.parentId === selectedNode.id
+  const handleAddArm = React.useCallback(
     (parentId?: string, direction?: "right" | "left") => {
       const parent = parentId
         ? nodes.find((n) => n.id === parentId)
@@ -338,7 +341,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       const newId = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const branchColor = parent.data.color || "#0084ff";
 
-      // Determine horizontal side: Right if right of root, Left if left of root
+      // Determine side: Right if right of root, Left if left of root
       let side: "right" | "left" = direction || "right";
       if (!direction) {
         if (parent.id === rootNode.id) {
@@ -349,11 +352,12 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
         }
       }
 
-      const siblingCount = edges.filter((e) => e.source === parent.id).length;
+      const existingChildren = edges.filter((e) => e.source === parent.id);
+      const childCount = existingChildren.length;
       const parentWidth = parent.data.customWidth || (parent.data.isRoot ? 240 : 180);
       const xOffset = side === "right" ? parentWidth + 70 : -(220 + 70);
       const yOffset =
-        siblingCount === 0 ? 0 : (siblingCount % 2 === 1 ? 1 : -1) * Math.ceil(siblingCount / 2) * 85;
+        childCount === 0 ? 0 : (childCount % 2 === 1 ? 1 : -1) * Math.ceil(childCount / 2) * 85;
 
       const newNode: Node<MindMapNodeData> = {
         id: newId,
@@ -363,11 +367,11 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
           y: parent.position.y + yOffset,
         },
         data: {
-          text: "New Sub-topic",
+          text: "New Arm",
           description: "",
           icon: null,
           color: branchColor,
-          parentId: parent.id,
+          parentId: parent.id, // STRICT RULE: parentId is the selected node
           collapsed: false,
           isRoot: false,
         },
@@ -375,14 +379,14 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
 
       const newEdge: Edge = {
         id: `edge_${parent.id}_${newId}`,
-        source: parent.id,
+        source: parent.id, // STRICT RULE: source is parent
         target: newId,
         type: "mindMap",
         data: { color: branchColor },
         animated: true,
       };
 
-      // If parent was collapsed, unfold parent so new child is visible
+      // If parent was collapsed, unfold parent so new arm is visible
       const nextNodes = nodes.map((n) =>
         n.id === parent.id ? { ...n, data: { ...n.data, collapsed: false } } : n
       );
@@ -398,14 +402,65 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     [nodes, edges, selectedNodeId, recordHistory, setNodes, setEdges, triggerAutosave]
   );
 
-  const handleAddSibling = React.useCallback(() => {
-    const selected = nodes.find((n) => n.id === selectedNodeId || n.selected);
-    if (!selected || selected.data.isRoot || !selected.data.parentId) {
-      handleAddChild(selected?.id || nodes[0]?.id);
-      return;
-    }
-    handleAddChild(selected.data.parentId);
-  }, [nodes, selectedNodeId, handleAddChild]);
+  // ADD SIBLING: Creates a node at the SAME hierarchy level (same parentId).
+  // newNode.parentId === selectedNode.parentId
+  const handleAddSibling = React.useCallback(
+    (targetId?: string) => {
+      const selected = targetId
+        ? nodes.find((n) => n.id === targetId)
+        : nodes.find((n) => n.id === selectedNodeId || n.selected);
+
+      if (!selected || selected.data.isRoot || !selected.data.parentId) {
+        toast.info("The root idea has no parent. Click + Arm to add a branch under it.");
+        return;
+      }
+
+      const parentId = selected.data.parentId;
+      const parent = nodes.find((n) => n.id === parentId);
+      if (!parent) return;
+
+      const newId = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const branchColor = selected.data.color || parent.data.color || "#0084ff";
+
+      // Place the new sibling directly below the selected sibling
+      const newNode: Node<MindMapNodeData> = {
+        id: newId,
+        type: "mindMap",
+        position: {
+          x: selected.position.x,
+          y: selected.position.y + 80,
+        },
+        data: {
+          text: "New Sibling",
+          description: "",
+          icon: null,
+          color: branchColor,
+          parentId: parentId, // STRICT RULE: same parentId as selected node
+          collapsed: false,
+          isRoot: false,
+        },
+      };
+
+      const newEdge: Edge = {
+        id: `edge_${parentId}_${newId}`,
+        source: parentId, // STRICT RULE: source is parent
+        target: newId,
+        type: "mindMap",
+        data: { color: branchColor },
+        animated: true,
+      };
+
+      const nextNodes = [...nodes, newNode];
+      const nextEdges = [...edges, newEdge];
+
+      recordHistory(nodes, edges);
+      setNodes(nextNodes);
+      setEdges(nextEdges);
+      setSelectedNodeId(newId);
+      triggerAutosave(nextNodes, nextEdges);
+    },
+    [nodes, edges, selectedNodeId, recordHistory, setNodes, setEdges, triggerAutosave]
+  );
 
   // Execute node deletion
   const executeDelete = React.useCallback(
@@ -461,6 +516,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     [selectedNodeId, nodes, getSubtreeDescendants, executeDelete]
   );
 
+  // COLLAPSE / EXPAND: ONLY toggles node.collapsed. NEVER deletes or alters children!
   const handleToggleCollapse = React.useCallback(
     (nodeId: string) => {
       const target = nodes.find((n) => n.id === nodeId);
@@ -847,7 +903,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
 
       if (e.key === "Tab") {
         e.preventDefault();
-        handleAddChild();
+        handleAddArm();
       } else if (e.key === "Enter") {
         e.preventDefault();
         handleAddSibling();
@@ -886,7 +942,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
-    handleAddChild,
+    handleAddArm,
     handleAddSibling,
     handleDeleteSelected,
     handleUndo,
@@ -941,8 +997,9 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
           childCount: directChildren.length,
           hiddenSubtreeCount: totalDescendants.length,
           isDropTarget: node.id === dragOverNodeId,
-          onAddChild: (parentId: string, direction?: "right" | "left") =>
-            handleAddChild(parentId, direction),
+          onAddArm: (parentId?: string, direction?: "right" | "left") =>
+            handleAddArm(parentId, direction),
+          onAddSibling: (nodeId?: string) => handleAddSibling(nodeId),
           onToggleCollapse: (nodeId: string) => handleToggleCollapse(nodeId),
           onUpdateText: (nodeId: string, text: string, desc?: string) =>
             handleUpdateNodeText(nodeId, text, desc),
@@ -973,7 +1030,8 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     selectedNodeId,
     dragOverNodeId,
     canvasFont,
-    handleAddChild,
+    handleAddArm,
+    handleAddSibling,
     handleToggleCollapse,
     handleUpdateNodeText,
     handleUpdateNodeWidth,
@@ -1076,7 +1134,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
 
       {/* Floating Toolbar with Canva-style tools & Font selector */}
       <FloatingToolbar
-        onAddChild={() => handleAddChild()}
+        onAddChild={() => handleAddArm()}
         onAddSibling={handleAddSibling}
         onUndo={handleUndo}
         onRedo={handleRedo}
@@ -1103,7 +1161,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
             handleUpdateNodeData(id, updates);
           }}
           onDelete={(id) => handleDeleteSelected(id)}
-          onAddChild={(id) => handleAddChild(id)}
+          onAddChild={(id) => handleAddArm(id)}
           onToggleCollapse={(id) => handleToggleCollapse(id)}
         />
       )}
@@ -1115,35 +1173,39 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
           className="fixed z-50 w-52 rounded-xl border border-border/80 bg-card/95 backdrop-blur-md shadow-2xl p-1 text-xs text-foreground space-y-0.5 animate-in fade-in zoom-in-95 duration-100"
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Add Arm (Child of this node) */}
           <button
             type="button"
             onClick={() => {
-              handleAddChild(contextMenuState.nodeId!);
+              handleAddArm(contextMenuState.nodeId!);
               setContextMenuState((prev) => ({ ...prev, isOpen: false }));
             }}
             className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors text-left"
           >
             <div className="flex items-center gap-2">
               <Plus className="h-3.5 w-3.5 text-primary" />
-              <span>Add Child</span>
+              <span>+ Arm (Child)</span>
             </div>
             <span className="text-[10px] text-muted-foreground font-mono">Tab</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              handleAddSibling();
-              setContextMenuState((prev) => ({ ...prev, isOpen: false }));
-            }}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors text-left"
-          >
-            <div className="flex items-center gap-2">
-              <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
-              <span>Add Sibling</span>
-            </div>
-            <span className="text-[10px] text-muted-foreground font-mono">Enter</span>
-          </button>
+          {/* Add Sibling (Same parent level — only if not root) */}
+          {!nodes.find((n) => n.id === contextMenuState.nodeId)?.data.isRoot && (
+            <button
+              type="button"
+              onClick={() => {
+                handleAddSibling(contextMenuState.nodeId!);
+                setContextMenuState((prev) => ({ ...prev, isOpen: false }));
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors text-left"
+            >
+              <div className="flex items-center gap-2">
+                <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>+ Sibling</span>
+              </div>
+              <span className="text-[10px] text-muted-foreground font-mono">Enter</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -1160,7 +1222,8 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
             <span className="text-[10px] text-muted-foreground font-mono">Ctrl+D</span>
           </button>
 
-          {nodes.find((n) => n.id === contextMenuState.nodeId)?.data.childCount ? (
+          {/* Collapse / Expand — ONLY if node has at least one child */}
+          {(nodes.find((n) => n.id === contextMenuState.nodeId)?.data.childCount || 0) > 0 ? (
             <button
               type="button"
               onClick={() => {
