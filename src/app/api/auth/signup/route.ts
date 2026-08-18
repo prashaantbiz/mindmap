@@ -79,8 +79,9 @@ export async function POST(req: Request) {
       },
       { status: 201 }
     );
-  } catch (error: any) {
-    console.error("Signup error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Registration error";
+    console.error("Signup error:", message);
     return NextResponse.json(
       { error: "Something went wrong during registration. Please try again." },
       { status: 500 }

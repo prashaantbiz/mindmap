@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/prisma";
+import { db, StoredProject } from "@/lib/prisma";
 import { z } from "zod";
 
 const createProjectSchema = z.object({
@@ -52,7 +52,12 @@ export async function GET(req: Request) {
       orderBy = { nodeCount: "desc" };
     }
 
-    const whereClause: any = {
+    const whereClause: {
+      userId: string;
+      isArchived: boolean;
+      folder?: string;
+      title?: { contains: string };
+    } = {
       userId: user.id,
       isArchived,
     };
@@ -71,11 +76,11 @@ export async function GET(req: Request) {
     });
 
     // Extract all unique folders for this user
-    const allUserProjects = await db.project.findMany({
+    const allUserProjects: StoredProject[] = await db.project.findMany({
       where: { userId: user.id, isArchived: false },
     });
     const folderSet = new Set<string>(["Personal", "Work"]);
-    allUserProjects.forEach((p) => {
+    allUserProjects.forEach((p: StoredProject) => {
       if (p.folder) folderSet.add(p.folder);
     });
 
@@ -84,12 +89,13 @@ export async function GET(req: Request) {
       folders: Array.from(folderSet),
       stats: {
         total: allUserProjects.length,
-        totalNodes: allUserProjects.reduce((acc, p) => acc + (p.nodeCount || 1), 0),
+        totalNodes: allUserProjects.reduce((acc: number, p: StoredProject) => acc + (p.nodeCount || 1), 0),
         archivedCount: (await db.project.findMany({ where: { userId: user.id, isArchived: true } })).length,
       },
     });
-  } catch (error: any) {
-    console.error("GET /api/projects error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch mind maps";
+    console.error("GET /api/projects error:", message);
     return NextResponse.json({ error: "Failed to fetch mind maps" }, { status: 500 });
   }
 }
@@ -139,8 +145,9 @@ export async function POST(req: Request) {
       { message: "Mind map created successfully", project: newProject },
       { status: 201 }
     );
-  } catch (error: any) {
-    console.error("POST /api/projects error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to create mind map";
+    console.error("POST /api/projects error:", message);
     return NextResponse.json({ error: "Failed to create mind map" }, { status: 500 });
   }
 }

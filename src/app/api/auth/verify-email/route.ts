@@ -65,8 +65,9 @@ export async function POST(req: Request) {
       message: "Email verified successfully! You can now access all features.",
       email: user.email,
     });
-  } catch (error: any) {
-    console.error("Verify email error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Email verification error";
+    console.error("Verify email error:", message);
     return NextResponse.json(
       { error: "Failed to verify email address." },
       { status: 500 }

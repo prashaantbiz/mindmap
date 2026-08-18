@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/prisma";
+import { db, StoredProject, StoredMindMapNode, StoredMindMapEdge } from "@/lib/prisma";
 
 export async function GET() {
   try {
@@ -18,13 +18,27 @@ export async function GET() {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const projects = await db.project.findMany({
+    const projects: StoredProject[] = await db.project.findMany({
       where: { userId: user.id },
       orderBy: { updatedAt: "desc" },
     });
 
-    const fullProjectsData = await Promise.all(
-      projects.map(async (project) => {
+    interface ExportedProjectData {
+      id: string;
+      title: string;
+      description: string | null;
+      folder: string | null;
+      tags: string[];
+      isArchived: boolean;
+      createdAt: Date;
+      updatedAt: Date;
+      share: { accessLevel: string; token: string; createdAt: Date } | null;
+      nodes: StoredMindMapNode[];
+      edges: StoredMindMapEdge[];
+    }
+
+    const fullProjectsData: ExportedProjectData[] = await Promise.all(
+      projects.map(async (project: StoredProject) => {
         const canvas = await db.canvas.getProjectCanvas(project.id, project.title);
         const share = await db.projectShare.findFirst({ where: { projectId: project.id } });
         return {
@@ -57,7 +71,7 @@ export async function GET() {
       },
       stats: {
         totalProjects: projects.length,
-        totalNodes: fullProjectsData.reduce((acc, p) => acc + p.nodes.length, 0),
+        totalNodes: fullProjectsData.reduce((acc: number, p: ExportedProjectData) => acc + p.nodes.length, 0),
       },
       projects: fullProjectsData,
     };
@@ -69,8 +83,9 @@ export async function GET() {
         "Content-Disposition": `attachment; filename="antigravity_mindmaps_backup_${new Date().toISOString().slice(0, 10)}.json"`,
       },
     });
-  } catch (error: any) {
-    console.error("GET /api/user/export error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to export data";
+    console.error("GET /api/user/export error:", message);
     return NextResponse.json({ error: "Failed to export data" }, { status: 500 });
   }
 }

@@ -21,8 +21,9 @@ export async function DELETE() {
     await db.user.delete({ where: { id: user.id } });
 
     return NextResponse.json({ message: "User account and all data deleted successfully" });
-  } catch (error: any) {
-    console.error("DELETE /api/user error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to delete account";
+    console.error("DELETE /api/user error:", message);
     return NextResponse.json({ error: "Failed to delete account" }, { status: 500 });
   }
 }

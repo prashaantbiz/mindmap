@@ -41,8 +41,9 @@ export async function POST(req: Request) {
       resetToken: resetToken.token,
       resetUrl: `/reset-password?token=${resetToken.token}`,
     });
-  } catch (error: any) {
-    console.error("Forgot password error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Password reset error";
+    console.error("Forgot password error:", message);
     return NextResponse.json(
       { error: "Failed to generate password reset request." },
       { status: 500 }

@@ -46,8 +46,9 @@ export async function POST(
       { message: "Mind map duplicated successfully", project: duplicated },
       { status: 201 }
     );
-  } catch (error: any) {
-    console.error("POST /api/projects/[id]/duplicate error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to duplicate mind map";
+    console.error("POST /api/projects/[id]/duplicate error:", message);
     return NextResponse.json({ error: "Failed to duplicate mind map" }, { status: 500 });
   }
 }

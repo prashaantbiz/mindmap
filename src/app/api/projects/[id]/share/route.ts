@@ -36,8 +36,9 @@ export async function GET(
       isShared: Boolean(share),
       share: share || null,
     });
-  } catch (error: any) {
-    console.error("GET /api/projects/[id]/share error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch share settings";
+    console.error("GET /api/projects/[id]/share error:", message);
     return NextResponse.json({ error: "Failed to fetch share settings" }, { status: 500 });
   }
 }
@@ -89,8 +90,9 @@ export async function POST(
       isShared: true,
       share,
     });
-  } catch (error: any) {
-    console.error("POST /api/projects/[id]/share error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to update share settings";
+    console.error("POST /api/projects/[id]/share error:", message);
     return NextResponse.json({ error: "Failed to update share settings" }, { status: 500 });
   }
 }
@@ -109,8 +111,9 @@ export async function DELETE(
     await db.projectShare.delete({ where: { projectId } });
 
     return NextResponse.json({ message: "Share link revoked successfully" });
-  } catch (error: any) {
-    console.error("DELETE /api/projects/[id]/share error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to revoke share link";
+    console.error("DELETE /api/projects/[id]/share error:", message);
     return NextResponse.json({ error: "Failed to revoke share link" }, { status: 500 });
   }
 }

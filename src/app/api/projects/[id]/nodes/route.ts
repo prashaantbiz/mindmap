@@ -29,7 +29,7 @@ export async function GET(
     }
 
     let templateKey = "blank";
-    const lowerTags = (project.tags || []).map((t) => t.toLowerCase());
+    const lowerTags = (project.tags || []).map((t: string) => t.toLowerCase());
     if (lowerTags.includes("roadmap")) templateKey = "roadmap";
     else if (lowerTags.includes("architecture")) templateKey = "architecture";
     else if (lowerTags.includes("meeting")) templateKey = "meeting";
@@ -42,8 +42,9 @@ export async function GET(
       nodes: canvas.nodes,
       edges: canvas.edges,
     });
-  } catch (error: any) {
-    console.error("GET /api/projects/[id]/nodes error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to load canvas data";
+    console.error("GET /api/projects/[id]/nodes error:", message);
     return NextResponse.json({ error: "Failed to load canvas data" }, { status: 500 });
   }
 }
@@ -87,8 +88,9 @@ export async function PUT(
       savedAt: new Date().toISOString(),
       nodeCount: result.count,
     });
-  } catch (error: any) {
-    console.error("PUT /api/projects/[id]/nodes error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to autosave canvas";
+    console.error("PUT /api/projects/[id]/nodes error:", message);
     return NextResponse.json({ error: "Failed to autosave canvas" }, { status: 500 });
   }
 }

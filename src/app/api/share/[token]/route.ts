@@ -42,8 +42,9 @@ export async function GET(
       nodes: canvas.nodes,
       edges: canvas.edges,
     });
-  } catch (error: any) {
-    console.error("GET /api/share/[token] error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to load shared mind map";
+    console.error("GET /api/share/[token] error:", message);
     return NextResponse.json({ error: "Failed to load shared mind map" }, { status: 500 });
   }
 }

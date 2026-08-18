@@ -2,7 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
-import { db } from "@/lib/prisma";
+import { db, StoredProject, StoredUser } from "@/lib/prisma";
 
 const isGoogleOAuthReal = Boolean(
   process.env.GOOGLE_CLIENT_ID &&
@@ -200,7 +200,7 @@ export const authOptions: NextAuthOptions = {
             where: { userId: token.id as string },
           });
           (session.user as any).projects = projects;
-          (session.user as any).defaultProject = projects.find((p: any) => p.isDefault) || projects[0] || null;
+          (session.user as { id?: string; email?: string | null; name?: string | null; image?: string | null; projects?: StoredProject[]; defaultProject?: StoredProject | null }).defaultProject = projects.find((p: StoredProject) => p.isDefault) || projects[0] || null;
         }
       }
       return session;

@@ -30,8 +30,9 @@ export async function GET() {
         projectsCount,
       },
     });
-  } catch (error: any) {
-    console.error("GET /api/user/profile error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch profile";
+    console.error("GET /api/user/profile error:", message);
     return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 });
   }
 }
@@ -71,8 +72,9 @@ export async function PATCH(req: Request) {
         image: updatedUser.image,
       },
     });
-  } catch (error: any) {
-    console.error("PATCH /api/user/profile error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to update profile";
+    console.error("PATCH /api/user/profile error:", message);
     return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
   }
 }

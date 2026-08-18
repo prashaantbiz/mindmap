@@ -30,7 +30,9 @@ export async function GET(
     }
 
     return NextResponse.json({ project });
-  } catch (error) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to fetch project";
+    console.error("GET /api/projects/[id] error:", message);
     return NextResponse.json({ error: "Failed to fetch project" }, { status: 500 });
   }
 }
@@ -73,8 +75,9 @@ export async function PATCH(
     });
 
     return NextResponse.json({ message: "Mind map updated successfully", project: updated });
-  } catch (error: any) {
-    console.error("PATCH /api/projects/[id] error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to update mind map";
+    console.error("PATCH /api/projects/[id] error:", message);
     return NextResponse.json({ error: "Failed to update mind map" }, { status: 500 });
   }
 }
@@ -107,8 +110,9 @@ export async function DELETE(
     await db.project.delete({ where: { id } });
 
     return NextResponse.json({ message: "Mind map deleted successfully" });
-  } catch (error: any) {
-    console.error("DELETE /api/projects/[id] error:", error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to delete mind map";
+    console.error("DELETE /api/projects/[id] error:", message);
     return NextResponse.json({ error: "Failed to delete mind map" }, { status: 500 });
   }
 }
