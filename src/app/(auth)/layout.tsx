@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { Sparkles } from "lucide-react";
 
 export default function AuthLayout({
   children,
@@ -16,13 +15,21 @@ export default function AuthLayout({
 
       {/* Top Header */}
       <header className="relative z-10 w-full max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-sm shadow-primary/30 group-hover:scale-105 transition-transform duration-150">
-            <Sparkles className="h-5 w-5 fill-current" />
+        <Link href="/" className="flex items-center gap-3 group">
+          <div className="relative h-10 w-10 rounded-full overflow-hidden ring-2 ring-primary/40 shadow-sm group-hover:scale-105 transition-transform duration-150 flex-shrink-0 bg-muted">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.jpg"
+              alt="mindmap.prashaant.biz logo"
+              className="h-full w-full object-cover"
+            />
           </div>
-          <span className="font-bold text-lg tracking-tight text-foreground">
-            Nexus
-          </span>
+          <div className="flex flex-col">
+            <span className="font-bold text-lg tracking-tight text-foreground group-hover:text-primary transition-colors">
+              mindmap.prashaant.biz
+            </span>
+            <span className="text-[10px] text-muted-foreground font-medium">Visual Ideation & Mind Mapping</span>
+          </div>
         </Link>
 
         <ThemeToggle />
@@ -35,7 +42,7 @@ export default function AuthLayout({
 
       {/* Footer */}
       <footer className="relative z-10 py-6 text-center text-xs text-muted-foreground">
-        <p>© 2026 Nexus Systems. Built with Next.js, Tailwind & NextAuth.</p>
+        <p>© 2026 mindmap.prashaant.biz. All rights reserved.</p>
       </footer>
     </div>
   );

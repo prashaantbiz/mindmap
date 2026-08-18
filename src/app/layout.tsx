@@ -13,9 +13,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Nexus - Design System & Authentication Platform",
+  title: "mindmap.prashaant.biz | Visual Mind Mapping & Ideation Canvas",
   description:
-    "Next.js App Router, Tailwind CSS, shadcn/ui design system, day/night theming, and full-stack PostgreSQL NextAuth authentication.",
+    "Interactive visual mind-mapping and brainstorming canvas by prashaant.biz with real-time editing, Canva-style resizing, typography styling, and instant sharing.",
+  icons: {
+    icon: "/logo.jpg",
+    apple: "/logo.jpg",
+  },
 };
 
 export default function RootLayout({
@@ -26,6 +30,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={inter.variable}>
       <head>
+        <link rel="icon" href="/logo.jpg" type="image/jpeg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

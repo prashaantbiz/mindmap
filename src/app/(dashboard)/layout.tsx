@@ -13,11 +13,11 @@ export default function DashboardLayout({
       </main>
       <footer className="border-t border-border/60 py-6 text-center text-xs text-muted-foreground">
         <div className="max-w-7xl mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p>© 2026 Nexus Systems. Built with Next.js, Tailwind CSS & NextAuth.</p>
+          <p>© 2026 mindmap.prashaant.biz. All rights reserved.</p>
           <div className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              Theme Engine Active
+              mindmap.prashaant.biz
             </span>
           </div>
         </div>

@@ -61,7 +61,7 @@ export async function GET() {
 
     const exportPayload = {
       version: "1.0",
-      app: "Antigravity MindMap",
+      app: "mindmap.prashaant.biz",
       exportedAt: new Date().toISOString(),
       user: {
         id: user.id,
@@ -80,7 +80,7 @@ export async function GET() {
       status: 200,
       headers: {
         "Content-Type": "application/json",
-        "Content-Disposition": `attachment; filename="antigravity_mindmaps_backup_${new Date().toISOString().slice(0, 10)}.json"`,
+        "Content-Disposition": `attachment; filename="mindmap_prashaant_biz_backup_${new Date().toISOString().slice(0, 10)}.json"`,
       },
     });
   } catch (error: unknown) {

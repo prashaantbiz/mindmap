@@ -87,15 +87,22 @@ export function EditorTopNav({
   return (
     <header className="absolute top-0 left-0 right-0 z-40 h-14 border-b border-border/70 bg-background/80 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between transition-colors">
       {/* Left: Back Link & Editable Title */}
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <Link href="/" className="flex items-center gap-2 group flex-shrink-0" title="mindmap.prashaant.biz">
+          <div className="relative h-7.5 w-7.5 rounded-full overflow-hidden ring-1.5 ring-primary/40 flex-shrink-0 bg-muted group-hover:scale-105 transition-transform">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpg" alt="mindmap.prashaant.biz" className="h-full w-full object-cover" />
+          </div>
+        </Link>
+
         <Button
           asChild
           variant="ghost"
           size="sm"
-          className="h-8.5 px-2.5 rounded-lg text-xs font-semibold gap-1 text-muted-foreground hover:text-foreground"
+          className="h-8 px-2 rounded-lg text-xs font-semibold gap-1 text-muted-foreground hover:text-foreground"
         >
           <Link href="/">
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Projects</span>
           </Link>
         </Button>

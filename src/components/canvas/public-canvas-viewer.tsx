@@ -169,8 +169,9 @@ function PublicCanvasInner({
       <header className="absolute top-4 left-4 right-4 z-40 flex items-center justify-between pointer-events-none">
         {/* Left: Title and Read-only Badge */}
         <div className="pointer-events-auto flex items-center gap-2.5 p-1.5 px-3 rounded-2xl border border-border/80 bg-card/90 backdrop-blur-md shadow-lg shadow-black/5">
-          <div className="h-6 w-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-            <Sparkles className="h-3.5 w-3.5" />
+          <div className="relative h-6 w-6 rounded-full overflow-hidden ring-1 ring-primary/40 flex-shrink-0 bg-muted">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpg" alt="mindmap.prashaant.biz" className="h-full w-full object-cover" />
           </div>
           <div className="flex items-center gap-2">
             <h1 className="text-xs font-bold text-foreground truncate max-w-[200px] sm:max-w-xs">
@@ -205,8 +206,8 @@ function PublicCanvasInner({
               </>
             ) : (
               <>
-                <Copy className="h-3.5 w-3.5 text-primary" />
-                <span className="hidden sm:inline">Copy Link</span>
+                <Share2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Share</span>
               </>
             )}
           </Button>
@@ -249,16 +250,8 @@ function PublicCanvasInner({
         />
       </ReactFlow>
 
-      {/* Floating Zoom Controls */}
-      <div className="absolute bottom-6 right-6 z-40 flex items-center gap-1 p-1 rounded-xl border border-border/80 bg-card/90 backdrop-blur-md shadow-lg">
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => reactFlowInstance?.zoomOut({ duration: 200 })}
-          className="h-7 w-7 rounded-lg"
-        >
-          <ZoomOut className="h-3.5 w-3.5" />
-        </Button>
+      {/* Floating Canvas View Controls (Bottom Left) */}
+      <div className="absolute bottom-5 left-5 z-40 flex items-center gap-1.5 p-1.5 rounded-2xl border border-border/80 bg-card/90 backdrop-blur-md shadow-xl shadow-black/10">
         <Button
           size="icon"
           variant="ghost"
@@ -270,6 +263,14 @@ function PublicCanvasInner({
         <Button
           size="icon"
           variant="ghost"
+          onClick={() => reactFlowInstance?.zoomOut({ duration: 200 })}
+          className="h-7 w-7 rounded-lg"
+        >
+          <ZoomOut className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
           onClick={() => reactFlowInstance?.fitView({ duration: 300, padding: 0.2 })}
           className="h-7 w-7 rounded-lg"
         >
@@ -277,11 +278,15 @@ function PublicCanvasInner({
         </Button>
       </div>
 
-      {/* Bottom Center "Made with Antigravity MindMap" Footer Banner */}
+      {/* Bottom Center "Made with mindmap.prashaant.biz" Footer Banner */}
       <footer className="absolute bottom-5 left-1/2 -translate-x-1/2 z-40">
         <div className="flex items-center gap-3 px-4 py-2 rounded-full border border-border/80 bg-card/90 backdrop-blur-md shadow-xl shadow-black/10">
+          <div className="relative h-6 w-6 rounded-full overflow-hidden ring-1 ring-primary/40 flex-shrink-0 bg-muted">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpg" alt="mindmap.prashaant.biz" className="h-full w-full object-cover" />
+          </div>
           <span className="text-xs text-muted-foreground flex items-center gap-1">
-            Made with <strong className="text-foreground font-semibold">Antigravity MindMap</strong>
+            Made with <strong className="text-foreground font-semibold">mindmap.prashaant.biz</strong>
           </span>
           <span className="h-3 w-px bg-border" />
           <Button

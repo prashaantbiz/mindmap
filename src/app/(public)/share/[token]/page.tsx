@@ -19,8 +19,8 @@ export async function generateMetadata({
   }
   const project = await db.project.findUnique({ where: { id: share.projectId } });
   return {
-    title: `${project?.title || "Mind Map"} | Shared View`,
-    description: project?.description || "Interactive shared mind map built with Antigravity MindMap.",
+    title: `${project?.title || "Mind Map"} | mindmap.prashaant.biz`,
+    description: project?.description || "Interactive shared mind map built with mindmap.prashaant.biz.",
   };
 }
 
@@ -48,7 +48,7 @@ export default async function SharedProjectPage({
           <Button asChild className="w-full text-xs font-semibold">
             <Link href="/login">
               <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-              <span>Go to Antigravity MindMap</span>
+              <span>Go to mindmap.prashaant.biz</span>
             </Link>
           </Button>
         </div>

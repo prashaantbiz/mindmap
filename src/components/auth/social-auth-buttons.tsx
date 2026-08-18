@@ -159,7 +159,7 @@ export function GoogleAuthButton() {
               </DialogTitle>
             </div>
             <DialogDescription className="text-xs text-muted-foreground">
-              Choose an account to continue to <strong>Antigravity MindMap</strong>
+              Choose an account to continue to <strong>mindmap.prashaant.biz</strong>
             </DialogDescription>
           </DialogHeader>
 

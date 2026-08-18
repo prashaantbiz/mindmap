@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Sparkles, Layers, ShieldCheck, Box } from "lucide-react";
+import Image from "next/image";
+import { Layers, ShieldCheck } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UserAvatarMenu } from "@/components/auth/user-avatar-menu";
 import { Badge } from "@/components/ui/badge";
@@ -13,16 +14,21 @@ export function TopNav() {
       <div className="max-w-7xl mx-auto flex h-15 items-center justify-between px-4 sm:px-8">
         {/* Left: Brand Logo & Minimal links */}
         <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="h-8.5 w-8.5 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm shadow-primary/30 group-hover:scale-105 transition-transform duration-150">
-              <Sparkles className="h-4.5 w-4.5 fill-current" />
+          <Link href="/" className="flex items-center gap-3 group">
+            <div className="relative h-9 w-9 rounded-full overflow-hidden ring-2 ring-primary/40 shadow-sm group-hover:scale-105 transition-transform duration-150 flex-shrink-0 bg-muted">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo.jpg"
+                alt="mindmap.prashaant.biz logo"
+                className="h-full w-full object-cover"
+              />
             </div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-base tracking-tight text-foreground">
-                Nexus
+              <span className="font-bold text-base tracking-tight text-foreground group-hover:text-primary transition-colors">
+                mindmap.prashaant.biz
               </span>
-              <Badge variant="outline" className="text-[10px] font-medium h-4.5 px-1.5 border-border/80">
-                Core v1.0
+              <Badge variant="outline" className="text-[10px] font-medium h-4.5 px-1.5 border-border/80 text-primary">
+                v1.0
               </Badge>
             </div>
           </Link>
@@ -33,12 +39,12 @@ export function TopNav() {
               className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors duration-150"
             >
               <Layers className="h-3.5 w-3.5" />
-              <span>Overview</span>
+              <span>Workspace</span>
             </Link>
             <span className="h-3 w-px bg-border" />
             <div className="flex items-center gap-1.5 text-muted-foreground/80">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-              <span>NextAuth Protected</span>
+              <span>mindmap.prashaant.biz</span>
             </div>
           </nav>
         </div>
