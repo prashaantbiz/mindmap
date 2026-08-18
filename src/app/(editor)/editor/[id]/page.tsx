@@ -3,8 +3,8 @@ import { Metadata } from "next";
 import { MindMapCanvas } from "@/components/canvas/mind-map-canvas";
 
 export const metadata: Metadata = {
-  title: "Mind Map Editor | Antigravity MindMap",
-  description: "Infinite interactive canvas for visual brainstorming and mind mapping.",
+  title: "Mind Map Editor | mindmap.prashaant.biz",
+  description: "Infinite interactive canvas for visual brainstorming and mind mapping by prashaant.biz.",
 };
 
 export default async function EditorPage({

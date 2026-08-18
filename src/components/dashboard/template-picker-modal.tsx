@@ -26,6 +26,7 @@ import {
   Folder,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 interface TemplatePickerModalProps {
   open: boolean;
@@ -83,6 +84,7 @@ export function TemplatePickerModal({
   onProjectCreated,
   availableFolders,
 }: TemplatePickerModalProps) {
+  const router = useRouter();
   const [selectedTemplate, setSelectedTemplate] = React.useState("blank");
   const [title, setTitle] = React.useState("Untitled Mind Map");
   const [folder, setFolder] = React.useState("Personal");
@@ -121,13 +123,14 @@ export function TemplatePickerModal({
       }
 
       toast.success("Mind map created!", {
-        description: `Created "${data.project.title}" with ${data.project.nodeCount} starter nodes.`,
+        description: `Opening "${data.project.title}"...`,
       });
 
       onOpenChange(false);
       onProjectCreated();
       setTitle("Untitled Mind Map");
       setSelectedTemplate("blank");
+      router.push(`/editor/${data.project.id}`);
     } catch (err) {
       toast.error("An error occurred while creating the mind map.");
     } finally {
