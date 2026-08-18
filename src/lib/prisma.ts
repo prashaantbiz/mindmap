@@ -106,6 +106,11 @@ export interface StoredVerificationToken {
   type: string;
 }
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __inMemoryDevStore: DevDataStore | undefined;
+}
+
 interface DevDataStore {
   users: StoredUser[];
   projects: StoredProject[];
@@ -115,12 +120,25 @@ interface DevDataStore {
   verificationTokens: StoredVerificationToken[];
 }
 
-const dataFilePath = path.join(process.cwd(), ".dev-db-store.json");
+const getStorePath = () => {
+  try {
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === "production") {
+      return path.join("/tmp", ".dev-db-store.json");
+    }
+    return path.join(process.cwd(), ".dev-db-store.json");
+  } catch {
+    return path.join(process.cwd(), ".dev-db-store.json");
+  }
+};
 
 function readDevStore(): DevDataStore {
+  if (global.__inMemoryDevStore) {
+    return global.__inMemoryDevStore;
+  }
   try {
-    if (fs.existsSync(dataFilePath)) {
-      const data = fs.readFileSync(dataFilePath, "utf-8");
+    const storePath = getStorePath();
+    if (fs.existsSync(storePath)) {
+      const data = fs.readFileSync(storePath, "utf-8");
       const parsed: DevDataStore = JSON.parse(data);
       parsed.projects = (parsed.projects || []).map((p: StoredProject) => ({
         id: p.id,
@@ -139,19 +157,27 @@ function readDevStore(): DevDataStore {
       parsed.mindMapNodes = parsed.mindMapNodes || [];
       parsed.mindMapEdges = parsed.mindMapEdges || [];
       parsed.projectShares = parsed.projectShares || [];
+      global.__inMemoryDevStore = parsed;
       return parsed;
     }
   } catch (err: unknown) {
     console.warn("Could not read local dev store:", err);
   }
-  return { users: [], projects: [], mindMapNodes: [], mindMapEdges: [], projectShares: [], verificationTokens: [] };
+  const initialStore: DevDataStore = { users: [], projects: [], mindMapNodes: [], mindMapEdges: [], projectShares: [], verificationTokens: [] };
+  global.__inMemoryDevStore = initialStore;
+  return initialStore;
 }
 
 function writeDevStore(data: DevDataStore) {
+  global.__inMemoryDevStore = data;
   try {
-    fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2), "utf-8");
-  } catch (err: unknown) {
-    console.warn("Could not save local dev store:", err);
+    const storePath = getStorePath();
+    fs.writeFileSync(storePath, JSON.stringify(data, null, 2), "utf-8");
+  } catch {
+    try {
+      const fallbackPath = path.join("/tmp", ".dev-db-store.json");
+      fs.writeFileSync(fallbackPath, JSON.stringify(data, null, 2), "utf-8");
+    } catch {}
   }
 }
 

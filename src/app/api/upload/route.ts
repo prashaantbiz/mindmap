@@ -29,15 +29,20 @@ export async function POST(req: Request) {
     const safeBaseName = path.basename(originalName, ext).replace(/[^a-zA-Z0-9_-]/g, "_");
     const uniqueName = `media_${Date.now()}_${Math.random().toString(36).substring(2, 6)}_${safeBaseName}${ext}`;
 
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
+    let publicUrl = `/uploads/${uniqueName}`;
+
+    try {
+      const uploadsDir = path.join(process.cwd(), "public", "uploads");
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      const filePath = path.join(uploadsDir, uniqueName);
+      await fs.promises.writeFile(filePath, buffer);
+    } catch {
+      // Serverless / Read-only filesystem fallback: return base64 data URI directly
+      const mime = file.type || "image/png";
+      publicUrl = `data:${mime};base64,${buffer.toString("base64")}`;
     }
-
-    const filePath = path.join(uploadsDir, uniqueName);
-    await fs.promises.writeFile(filePath, buffer);
-
-    const publicUrl = `/uploads/${uniqueName}`;
 
     return NextResponse.json({
       url: publicUrl,
