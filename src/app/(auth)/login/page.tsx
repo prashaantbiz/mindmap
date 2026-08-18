@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { GoogleAuthButton } from "@/components/auth/social-auth-buttons";
-import { Loader2, Mail, Lock, AlertCircle, ArrowRight } from "lucide-react";
+import { Loader2, Mail, Lock, AlertCircle, ArrowRight, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 function LoginForm() {
@@ -60,22 +60,26 @@ function LoginForm() {
   return (
     <Card className="border-border/80 bg-card/95 backdrop-blur-xs shadow-xl shadow-black/5 dark:shadow-black/40">
       <CardHeader className="space-y-1.5 pb-6">
+        <div className="mx-auto mb-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[11px] font-semibold border border-emerald-500/20">
+          <ShieldCheck className="h-3.5 w-3.5" />
+          <span>Gmail Login Required</span>
+        </div>
         <CardTitle className="text-2xl font-bold tracking-tight text-center">
-          Welcome back
+          Sign In to Workspace
         </CardTitle>
-        <CardDescription className="text-center text-sm">
-          Sign in to access your projects and workspace
+        <CardDescription className="text-center text-xs">
+          Continue with your Google account to access your mind maps and real-time canvas
         </CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Google OAuth */}
+        {/* Google OAuth (Primary & Mandatory) */}
         <GoogleAuthButton />
 
         <div className="relative my-4 flex items-center justify-center">
           <Separator className="w-full" />
-          <span className="absolute bg-card px-3 text-[11px] font-medium tracking-wider uppercase text-muted-foreground">
-            Or continue with email
+          <span className="absolute bg-card px-3 text-[10px] font-medium tracking-wider uppercase text-muted-foreground">
+            Or direct email credentials
           </span>
         </div>
 
@@ -86,9 +90,9 @@ function LoginForm() {
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleLogin} className="space-y-3.5">
           <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email" className="text-xs">Email</Label>
             <div className="relative">
               <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
@@ -97,7 +101,7 @@ function LoginForm() {
                 placeholder="alex@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="pl-9.5"
+                className="pl-9.5 h-9.5 text-xs"
                 required
                 autoComplete="email"
                 disabled={loading}
@@ -107,7 +111,7 @@ function LoginForm() {
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-xs">Password</Label>
               <Link
                 href="/forgot-password"
                 className="text-xs text-primary hover:underline font-medium"
@@ -123,7 +127,7 @@ function LoginForm() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="pl-9.5"
+                className="pl-9.5 h-9.5 text-xs"
                 required
                 autoComplete="current-password"
                 disabled={loading}
@@ -133,7 +137,8 @@ function LoginForm() {
 
           <Button
             type="submit"
-            className="w-full h-11 font-semibold group"
+            variant="outline"
+            className="w-full h-10 font-semibold group text-xs"
             disabled={loading}
           >
             {loading ? (
@@ -143,8 +148,8 @@ function LoginForm() {
               </>
             ) : (
               <>
-                Sign In
-                <ArrowRight className="h-4 w-4 ml-1 group-hover:translate-x-0.5 transition-transform duration-150" />
+                Sign In with Email
+                <ArrowRight className="h-3.5 w-3.5 ml-1 group-hover:translate-x-0.5 transition-transform duration-150" />
               </>
             )}
           </Button>
@@ -186,7 +191,7 @@ function LoginForm() {
                 setLoading(false);
               }
             }}
-            className="w-full h-10 text-xs font-semibold border-dashed border-primary/50 text-primary hover:bg-primary/10"
+            className="w-full h-9 text-xs font-semibold border-dashed border-primary/50 text-primary hover:bg-primary/10"
             disabled={loading}
           >
             ⚡ Quick 1-Click Demo Login

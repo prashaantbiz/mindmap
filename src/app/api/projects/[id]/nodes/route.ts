@@ -27,10 +27,13 @@ export async function GET(
 
     let templateKey = "blank";
     const lowerTags = (project.tags || []).map((t: string) => t.toLowerCase());
-    if (lowerTags.includes("roadmap")) templateKey = "roadmap";
-    else if (lowerTags.includes("architecture")) templateKey = "architecture";
-    else if (lowerTags.includes("meeting")) templateKey = "meeting";
-    else if (lowerTags.includes("brainstorm")) templateKey = "brainstorm";
+    if (lowerTags.includes("system-architecture") || lowerTags.includes("architecture")) templateKey = "system-architecture";
+    else if (lowerTags.includes("ai-pipeline") || lowerTags.includes("ai")) templateKey = "ai-pipeline";
+    else if (lowerTags.includes("engineering-roadmap") || lowerTags.includes("roadmap") || lowerTags.includes("sprint")) templateKey = "engineering-roadmap";
+    else if (lowerTags.includes("product-growth") || lowerTags.includes("gtm") || lowerTags.includes("growth")) templateKey = "product-growth";
+    else if (lowerTags.includes("consultation-process") || lowerTags.includes("consultation") || lowerTags.includes("strategy") || lowerTags.includes("meeting")) templateKey = "consultation-process";
+    else if (lowerTags.includes("design-system") || lowerTags.includes("design") || lowerTags.includes("ux")) templateKey = "design-system";
+    else if (lowerTags.includes("brainstorm")) templateKey = "product-growth";
 
     const canvas = await db.canvas.getProjectCanvas(projectId, project.title, templateKey);
 

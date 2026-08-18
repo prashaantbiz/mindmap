@@ -10,6 +10,7 @@ import {
 } from "@prisma/client";
 import fs from "fs";
 import path from "path";
+import { getTemplateById } from "./templates";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -389,46 +390,7 @@ export const db = {
 
   canvas: {
     async getProjectCanvas(projectId: string, projectTitle: string = "Central Idea", template: string = "blank"): Promise<{ nodes: StoredMindMapNode[]; edges: StoredMindMapEdge[] }> {
-      const getTemplateTree = (rootId: string, title: string) => {
-        if (template === "roadmap") {
-          return [
-            { text: "Q1 Foundations", desc: "Auth & Canvas Editor", color: "#6366f1", x: 280, y: -90, icon: "🏗️", subs: ["Auth & Database", "Interactive Canvas"] },
-            { text: "Q2 Collaboration", desc: "Real-time multi-user", color: "#06b6d4", x: 280, y: 90, icon: "👥", subs: ["Live Cursors", "Shared Workspaces"] },
-            { text: "Q3 AI Intelligence", desc: "AI Node Generator", color: "#8b5cf6", x: -280, y: -90, icon: "✨", subs: ["Idea Generator", "Auto-Summarize"] },
-            { text: "Q4 Enterprise", desc: "Security & Governance", color: "#10b981", x: -280, y: 90, icon: "🏢", subs: ["SSO Integration", "Audit Logs"] },
-          ];
-        }
-        if (template === "architecture") {
-          return [
-            { text: "Frontend Client", desc: "Next.js App Router", color: "#6366f1", x: 280, y: -90, icon: "💻", subs: ["Tailwind Theme", "React Flow Canvas"] },
-            { text: "API Gateway", desc: "REST & Middleware", color: "#06b6d4", x: 280, y: 90, icon: "🌐", subs: ["Route Protection", "Rate Limiter"] },
-            { text: "Core Services", desc: "Business logic engine", color: "#ec4899", x: -280, y: -90, icon: "⚙️", subs: ["Layout Engine", "Sync Processor"] },
-            { text: "Persistence Layer", desc: "Database & Storage", color: "#10b981", x: -280, y: 90, icon: "🗄️", subs: ["Postgres Database", "Prisma Client"] },
-          ];
-        }
-        if (template === "meeting") {
-          return [
-            { text: "Agenda", desc: "Topics to cover", color: "#6366f1", x: 280, y: -90, icon: "📋", subs: ["Progress Review", "Q3 Priorities"] },
-            { text: "Discussion", desc: "Key talking points", color: "#06b6d4", x: 280, y: 90, icon: "💬", subs: ["Performance", "User Feedback"] },
-            { text: "Decisions", desc: "Agreed conclusions", color: "#10b981", x: -280, y: -90, icon: "✅", subs: ["Ship React Flow", "Adopt Tailwind"] },
-            { text: "Action Items", desc: "Next immediate steps", color: "#f59e0b", x: -280, y: 90, icon: "⚡", subs: ["Test Autosave", "Verify Build"] },
-          ];
-        }
-        if (template === "brainstorm") {
-          return [
-            { text: "Strengths & Assets", desc: "Core advantages", color: "#6366f1", x: 280, y: -90, icon: "💪", subs: ["Proprietary IP", "Agile Team"] },
-            { text: "Opportunities", desc: "Growth potential", color: "#ec4899", x: 280, y: 90, icon: "🚀", subs: ["New Markets", "Add-on Features"] },
-            { text: "Key Challenges", desc: "Risks to mitigate", color: "#f43f5e", x: -280, y: -90, icon: "⚠️", subs: ["Bandwidth", "Market Competition"] },
-            { text: "Strategic Goals", desc: "Measurable targets", color: "#10b981", x: -280, y: 90, icon: "🎯", subs: ["Q3 Milestone", "User Retention"] },
-          ];
-        }
-        return [
-          { text: "Core Objectives", desc: "Primary goals and milestones", color: "#6366f1", x: 280, y: -90, icon: "🎯", subs: [] },
-          { text: "Key Insights", desc: "Discoveries and data points", color: "#ec4899", x: 280, y: 90, icon: "🔍", subs: [] },
-          { text: "Action Items", desc: "Tasks and execution steps", color: "#10b981", x: -280, y: -90, icon: "⚡", subs: [] },
-          { text: "Resources & Notes", desc: "References and links", color: "#f59e0b", x: -280, y: 90, icon: "📚", subs: [] },
-        ];
-      };
+      const templateData = getTemplateById(template);
 
       try {
         if (prisma) {
@@ -436,14 +398,15 @@ export const db = {
           let edges = await prisma.mindMapEdge.findMany({ where: { projectId } });
 
           if (nodes.length === 0) {
+            const rootText = projectTitle && !projectTitle.startsWith("Untitled") ? projectTitle : templateData.rootNode.text;
             const root = await prisma.mindMapNode.create({
               data: {
                 projectId,
                 parentId: null,
-                text: projectTitle || "Central Idea",
-                description: "Root concept of your mind map",
-                icon: "💡",
-                color: "#6366f1",
+                text: rootText,
+                description: templateData.rootNode.desc || "Root concept of your mind map",
+                icon: templateData.rootNode.icon || "💡",
+                color: templateData.rootNode.color || "#0084ff",
                 positionX: 0,
                 positionY: 0,
                 collapsed: false,
@@ -451,16 +414,14 @@ export const db = {
               },
             });
 
-            const branchTemplates = getTemplateTree(root.id, projectTitle);
-
-            for (const b of branchTemplates) {
+            for (const b of templateData.branches) {
               const child = await prisma.mindMapNode.create({
                 data: {
                   projectId,
                   parentId: root.id,
                   text: b.text,
-                  description: b.desc,
-                  icon: b.icon,
+                  description: b.desc || null,
+                  icon: b.icon || null,
                   color: b.color,
                   positionX: b.x,
                   positionY: b.y,
@@ -479,17 +440,18 @@ export const db = {
                 },
               });
 
-              for (let j = 0; j < (b.subs || []).length; j++) {
-                const subText = b.subs[j];
+              const subs = b.subs || [];
+              for (let j = 0; j < subs.length; j++) {
+                const sub = subs[j];
                 const subX = b.x > 0 ? b.x + 240 : b.x - 240;
-                const subY = b.y + (j === 0 ? -40 : 40);
+                const subY = b.y + (j === 0 ? -45 : j === 1 ? 0 : 45);
 
                 const subChild = await prisma.mindMapNode.create({
                   data: {
                     projectId,
                     parentId: child.id,
-                    text: subText,
-                    description: null,
+                    text: sub.text,
+                    description: sub.desc || null,
                     icon: null,
                     color: b.color,
                     positionX: subX,
@@ -525,14 +487,15 @@ export const db = {
 
       if (nodes.length === 0) {
         const rootId = `node_${Date.now()}_root`;
+        const rootText = projectTitle && !projectTitle.startsWith("Untitled") ? projectTitle : templateData.rootNode.text;
         const rootNode: StoredMindMapNode = {
           id: rootId,
           projectId,
           parentId: null,
-          text: projectTitle || "Central Idea",
-          description: "Root concept of your mind map",
-          icon: "💡",
-          color: "#6366f1",
+          text: rootText,
+          description: templateData.rootNode.desc || "Root concept of your mind map",
+          icon: templateData.rootNode.icon || "💡",
+          color: templateData.rootNode.color || "#0084ff",
           positionX: 0,
           positionY: 0,
           collapsed: false,
@@ -542,17 +505,15 @@ export const db = {
         };
         store.mindMapNodes.push(rootNode);
 
-        const branchTemplates = getTemplateTree(rootId, projectTitle);
-
-        branchTemplates.forEach((b: { text: string; desc: string; color: string; x: number; y: number; icon: string; subs?: string[] }, i: number) => {
+        templateData.branches.forEach((b, i) => {
           const childId = `node_${Date.now()}_${i}`;
           store.mindMapNodes.push({
             id: childId,
             projectId,
             parentId: rootId,
             text: b.text,
-            description: b.desc,
-            icon: b.icon,
+            description: b.desc || null,
+            icon: b.icon || null,
             color: b.color,
             positionX: b.x,
             positionY: b.y,
@@ -573,17 +534,17 @@ export const db = {
             updatedAt: new Date(),
           });
 
-          (b.subs || []).forEach((subText: string, j: number) => {
+          (b.subs || []).forEach((sub, j) => {
             const subId = `node_${Date.now()}_${i}_${j}`;
             const subX = b.x > 0 ? b.x + 240 : b.x - 240;
-            const subY = b.y + (j === 0 ? -40 : 40);
+            const subY = b.y + (j === 0 ? -45 : j === 1 ? 0 : 45);
 
             store.mindMapNodes.push({
               id: subId,
               projectId,
               parentId: childId,
-              text: subText,
-              description: null,
+              text: sub.text,
+              description: sub.desc || null,
               icon: null,
               color: b.color,
               positionX: subX,

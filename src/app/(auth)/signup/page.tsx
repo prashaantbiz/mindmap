@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { GoogleAuthButton } from "@/components/auth/social-auth-buttons";
-import { Loader2, Mail, Lock, User, AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Loader2, Mail, Lock, User, AlertCircle, ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SignupPage() {
@@ -83,22 +83,26 @@ export default function SignupPage() {
   return (
     <Card className="border-border/80 bg-card/95 backdrop-blur-xs shadow-xl shadow-black/5 dark:shadow-black/40">
       <CardHeader className="space-y-1.5 pb-6">
+        <div className="mx-auto mb-1 flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[11px] font-semibold border border-emerald-500/20">
+          <ShieldCheck className="h-3.5 w-3.5" />
+          <span>Gmail Login Required</span>
+        </div>
         <CardTitle className="text-2xl font-bold tracking-tight text-center">
-          Create an account
+          Create Workspace Account
         </CardTitle>
-        <CardDescription className="text-center text-sm">
-          Get started with your provisioned workspace
+        <CardDescription className="text-center text-xs">
+          Get started with your provisioned workspace and cloud sync
         </CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Google OAuth */}
+        {/* Google OAuth (Primary & Mandatory) */}
         <GoogleAuthButton />
 
         <div className="relative my-4 flex items-center justify-center">
           <Separator className="w-full" />
-          <span className="absolute bg-card px-3 text-[11px] font-medium tracking-wider uppercase text-muted-foreground">
-            Or sign up with email
+          <span className="absolute bg-card px-3 text-[10px] font-medium tracking-wider uppercase text-muted-foreground">
+            Or register with direct email
           </span>
         </div>
 
@@ -116,9 +120,9 @@ export default function SignupPage() {
           </div>
         )}
 
-        <form onSubmit={handleSignup} className="space-y-4">
+        <form onSubmit={handleSignup} className="space-y-3.5">
           <div className="space-y-1.5">
-            <Label htmlFor="name">Full Name</Label>
+            <Label htmlFor="name" className="text-xs">Full Name</Label>
             <div className="relative">
               <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
@@ -127,7 +131,7 @@ export default function SignupPage() {
                 placeholder="Alex Morgan"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="pl-9.5"
+                className="pl-9.5 h-9.5 text-xs"
                 required
                 autoComplete="name"
                 disabled={loading}
@@ -136,7 +140,7 @@ export default function SignupPage() {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email" className="text-xs">Email</Label>
             <div className="relative">
               <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
@@ -145,7 +149,7 @@ export default function SignupPage() {
                 placeholder="alex@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="pl-9.5"
+                className="pl-9.5 h-9.5 text-xs"
                 required
                 autoComplete="email"
                 disabled={loading}
@@ -154,7 +158,7 @@ export default function SignupPage() {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password" className="text-xs">Password</Label>
             <div className="relative">
               <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
@@ -163,7 +167,7 @@ export default function SignupPage() {
                 placeholder="At least 6 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="pl-9.5"
+                className="pl-9.5 h-9.5 text-xs"
                 required
                 autoComplete="new-password"
                 disabled={loading}
@@ -173,7 +177,8 @@ export default function SignupPage() {
 
           <Button
             type="submit"
-            className="w-full h-11 font-semibold group"
+            variant="outline"
+            className="w-full h-10 font-semibold group text-xs"
             disabled={loading}
           >
             {loading ? (
@@ -183,8 +188,8 @@ export default function SignupPage() {
               </>
             ) : (
               <>
-                Create Account
-                <ArrowRight className="h-4 w-4 ml-1 group-hover:translate-x-0.5 transition-transform duration-150" />
+                Create Account with Email
+                <ArrowRight className="h-3.5 w-3.5 ml-1 group-hover:translate-x-0.5 transition-transform duration-150" />
               </>
             )}
           </Button>

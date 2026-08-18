@@ -7,17 +7,37 @@ import { z } from "zod";
 const createProjectSchema = z.object({
   title: z.string().min(1, "Title is required").max(100, "Title is too long"),
   description: z.string().max(500).optional(),
-  template: z.enum(["blank", "brainstorm", "roadmap", "architecture", "meeting"]).default("blank"),
+  template: z
+    .enum([
+      "blank",
+      "system-architecture",
+      "ai-pipeline",
+      "engineering-roadmap",
+      "product-growth",
+      "consultation-process",
+      "design-system",
+      "brainstorm",
+      "roadmap",
+      "architecture",
+      "meeting",
+    ])
+    .default("blank"),
   folder: z.string().default("Personal"),
   tags: z.array(z.string()).default([]),
 });
 
 const TEMPLATE_NODE_COUNTS: Record<string, { count: number; defaultTags: string[]; desc: string }> = {
   blank: { count: 1, defaultTags: ["Blank"], desc: "Blank canvas with a single root idea" },
-  brainstorm: { count: 15, defaultTags: ["Brainstorm", "Strategy"], desc: "Strengths, Opportunities, Risks, & Action items" },
-  roadmap: { count: 12, defaultTags: ["Roadmap", "Product"], desc: "Quarterly release milestones and feature branches" },
-  architecture: { count: 8, defaultTags: ["Architecture", "System"], desc: "Client, API gateway, microservices, and databases" },
-  meeting: { count: 10, defaultTags: ["Meeting", "Action Items"], desc: "Agenda, discussion points, key decisions, and next steps" },
+  "system-architecture": { count: 17, defaultTags: ["System-Architecture", "Cloud"], desc: "Full-stack cloud topology and distributed microservices" },
+  "ai-pipeline": { count: 16, defaultTags: ["AI-Pipeline", "LLM"], desc: "LLM agent architecture, RAG vector retrieval, and guardrails" },
+  "engineering-roadmap": { count: 16, defaultTags: ["Engineering-Roadmap", "Sprint"], desc: "Quarterly tech specs and delivery milestone tracks" },
+  "product-growth": { count: 16, defaultTags: ["Product-Growth", "GTM"], desc: "Product-led growth loops, developer acquisition, and enterprise sales" },
+  "consultation-process": { count: 16, defaultTags: ["Consultation-Process", "Strategy"], desc: "Client transformation framework: audit, target design, and rollout" },
+  "design-system": { count: 16, defaultTags: ["Design-System", "UX"], desc: "Design tokens, accessible primitives, and canvas interaction patterns" },
+  brainstorm: { count: 15, defaultTags: ["Product-Growth"], desc: "Growth, strengths, risks, and strategic targets" },
+  roadmap: { count: 16, defaultTags: ["Engineering-Roadmap"], desc: "Quarterly release milestones and feature branches" },
+  architecture: { count: 17, defaultTags: ["System-Architecture"], desc: "Client, API gateway, microservices, and databases" },
+  meeting: { count: 16, defaultTags: ["Consultation-Process"], desc: "Agenda, discussion points, key decisions, and next steps" },
 };
 
 export async function GET(req: Request) {
