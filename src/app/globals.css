@@ -1,0 +1,207 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* Soft off-white / paper tone background (not pure white) */
+  --background: 45 10% 98%;      /* #FBFBFA */
+  --foreground: 220 20% 12%;      /* #16181D */
+
+  --card: 0 0% 100%;             /* #FFFFFF */
+  --card-foreground: 220 20% 12%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 220 20% 12%;
+
+  /* Refined Indigo Accent */
+  --primary: 238.7 83.5% 66.7%;  /* #6366F1 */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 40 10% 93%;       /* #ECECE7 */
+  --secondary-foreground: 220 15% 15%;
+
+  --muted: 40 10% 94%;           /* #F0F0EB */
+  --muted-foreground: 220 10% 45%;
+
+  --accent: 238.7 83.5% 94%;
+  --accent-foreground: 238.7 83.5% 45%;
+
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 40 8% 88%;           /* #E5E5DF */
+  --input: 40 8% 88%;
+  --ring: 238.7 83.5% 66.7%;
+
+  --radius: 0.625rem;
+
+  --glow-color: rgba(99, 102, 241, 0.2);
+}
+
+.dark {
+  /* Deep charcoal / near-black background (not pure black) */
+  --background: 225 14% 6.3%;    /* #0E0F12 */
+  --foreground: 220 15% 95%;     /* #EFEFF4 */
+
+  --card: 224 14% 9.5%;          /* #14161C */
+  --card-foreground: 220 15% 95%;
+
+  --popover: 224 14% 9.5%;       /* #14161C */
+  --popover-foreground: 220 15% 95%;
+
+  /* Refined Indigo Accent */
+  --primary: 238.7 83.5% 66.7%;  /* #6366F1 */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 224 12% 14%;      /* #1D2028 */
+  --secondary-foreground: 220 15% 90%;
+
+  --muted: 224 12% 13%;          /* #1A1D25 */
+  --muted-foreground: 220 10% 60%;
+
+  --accent: 238.7 83.5% 20%;
+  --accent-foreground: 238.7 83.5% 85%;
+
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 224 12% 17%;         /* #252833 */
+  --input: 224 12% 17%;
+  --ring: 238.7 83.5% 66.7%;
+
+  --glow-color: rgba(99, 102, 241, 0.35);
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+* {
+  border-color: hsl(var(--border));
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, box-shadow;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  transition-duration: 150ms;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  min-height: 100vh;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Typography scale utilities */
+.text-display {
+  font-size: 2.25rem;
+  line-height: 2.5rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+@media (min-width: 768px) {
+  .text-display {
+    font-size: 3rem;
+    line-height: 1.1;
+  }
+}
+
+.text-heading {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+@media (min-width: 768px) {
+  .text-heading {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
+  }
+}
+
+.text-subheading {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.text-body {
+  font-size: 0.875rem;
+  line-height: 1.375rem;
+}
+
+.text-caption {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Glow utility for dark mode */
+.glow-accent {
+  box-shadow: 0 0 20px var(--glow-color);
+}
+
+.dark .glow-accent {
+  box-shadow: 0 0 24px var(--glow-color), 0 0 8px rgba(99, 102, 241, 0.5);
+}
+
+.glow-border {
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.dark .glow-border {
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 16px -2px rgba(99, 102, 241, 0.3);
+}
+
+/* Subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
+/* Custom Font Families */
+.font-inter { font-family: 'Inter', var(--font-sans), sans-serif; }
+.font-outfit { font-family: 'Outfit', sans-serif; }
+.font-poppins { font-family: 'Poppins', sans-serif; }
+.font-playfair { font-family: 'Playfair Display', serif; }
+.font-fira { font-family: 'Fira Code', monospace; }
+.font-caveat { font-family: 'Caveat', cursive; }
+.font-merriweather { font-family: 'Merriweather', serif; }
+.font-architects { font-family: 'Architects Daughter', cursive; }
+
