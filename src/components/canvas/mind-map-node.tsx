@@ -56,7 +56,7 @@ export function MindMapNodeComponent({
   );
   const [isResizing, setIsResizing] = React.useState(false);
 
-  const inputRef = React.useRef<HTMLInputElement>(null);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const resizeStartRef = React.useRef<{ startX: number; initialWidth: number }>({
     startX: 0,
     initialWidth: defaultWidth,
@@ -75,10 +75,13 @@ export function MindMapNodeComponent({
     }
   }, [data.customWidth, data.imageUrl, data.isRoot]);
 
+  // Auto-resize textarea height when editing
   React.useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.select();
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [isEditing]);
 
@@ -89,7 +92,7 @@ export function MindMapNodeComponent({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleFinishEditing();
@@ -215,22 +218,27 @@ export function MindMapNodeComponent({
       />
 
       {/* Header Row: Emoji Icon + Title */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-start gap-2">
         {data.icon && (
-          <span className="text-base shrink-0 select-none" role="img" aria-label="node icon">
+          <span className="text-base shrink-0 select-none mt-0.5" role="img" aria-label="node icon">
             {data.icon}
           </span>
         )}
 
         <div className="flex-1 min-w-0">
           {isEditing ? (
-            <input
-              ref={inputRef}
+            <textarea
+              ref={textareaRef}
+              rows={1}
               value={editText}
-              onChange={(e) => setEditText(e.target.value)}
+              onChange={(e) => {
+                setEditText(e.target.value);
+                e.target.style.height = "auto";
+                e.target.style.height = `${e.target.scrollHeight}px`;
+              }}
               onBlur={handleFinishEditing}
               onKeyDown={handleKeyDown}
-              className="w-full bg-background border border-primary rounded-md px-1.5 py-0.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full bg-background border border-primary rounded-md px-1.5 py-0.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none overflow-hidden"
             />
           ) : (
             <h4

@@ -14,6 +14,8 @@ import {
   EdgeTypes,
   ReactFlowInstance,
   SelectionMode,
+  NodeChange,
+  applyNodeChanges,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useTheme } from "next-themes";
@@ -24,10 +26,29 @@ import { FloatingToolbar } from "./floating-toolbar";
 import { NodeInspectorPanel } from "./node-inspector-panel";
 import { EditorTopNav } from "./editor-top-nav";
 import { ShareModal } from "./share-modal";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { CanvasHistoryManager } from "@/lib/canvas-history";
 import { applyAutoLayout, LayoutMode } from "@/lib/auto-layout";
 import { getFontClass } from "@/lib/fonts";
-import { Sparkles } from "lucide-react";
+import {
+  Plus,
+  GitBranch,
+  Edit3,
+  Copy,
+  Trash2,
+  FoldHorizontal,
+  UnfoldHorizontal,
+  Palette,
+  AlertTriangle,
+} from "lucide-react";
 
 const nodeTypes: NodeTypes = {
   mindMap: MindMapNodeComponent,
@@ -46,18 +67,49 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
   const isDark = resolvedTheme === "dark";
 
   // Canvas graph state
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node<MindMapNodeData>>([]);
+  const [nodes, setNodes] = useNodesState<Node<MindMapNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [reactFlowInstance, setReactFlowInstance] = React.useState<ReactFlowInstance<Node<MindMapNodeData>, Edge> | null>(null);
+  const [reactFlowInstance, setReactFlowInstance] =
+    React.useState<ReactFlowInstance<Node<MindMapNodeData>, Edge> | null>(null);
 
   // Metadata & Canvas UI State
-  const [project, setProject] = React.useState<{ id: string; title: string; folder?: string | null } | null>(null);
+  const [project, setProject] = React.useState<{
+    id: string;
+    title: string;
+    folder?: string | null;
+  } | null>(null);
   const [saveStatus, setSaveStatus] = React.useState<"saved" | "saving" | "unsaved">("saved");
   const [lastSavedAt, setLastSavedAt] = React.useState<Date | null>(null);
   const [showMinimap, setShowMinimap] = React.useState(true);
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = React.useState<string | null>(null);
   const [canvasFont, setCanvasFont] = React.useState<string>("inter");
+
+  // Delete Confirmation Modal State
+  const [deleteModalState, setDeleteModalState] = React.useState<{
+    isOpen: boolean;
+    nodeId: string | null;
+    nodeTitle: string;
+    descendantCount: number;
+  }>({
+    isOpen: false,
+    nodeId: null,
+    nodeTitle: "",
+    descendantCount: 0,
+  });
+
+  // Right-Click Context Menu State
+  const [contextMenuState, setContextMenuState] = React.useState<{
+    isOpen: boolean;
+    x: number;
+    y: number;
+    nodeId: string | null;
+  }>({
+    isOpen: false,
+    x: 0,
+    y: 0,
+    nodeId: null,
+  });
 
   // Share Modal State
   const [isShareModalOpen, setIsShareModalOpen] = React.useState(false);
@@ -91,7 +143,6 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
 
         setProject(data.project);
 
-        // Map DB nodes to React Flow format with rich attachments & sizing
         const initialNodes: Node<MindMapNodeData>[] = (data.nodes || []).map((n: any) => {
           let extra: any = {};
           if (n.attachments) {
@@ -108,7 +159,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
               text: n.text,
               description: n.description,
               icon: n.icon,
-              color: n.color || "#6366f1",
+              color: n.color || "#0084ff",
               parentId: n.parentId,
               collapsed: n.collapsed,
               isRoot: n.isRoot,
@@ -131,7 +182,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
           source: e.source,
           target: e.target,
           type: "mindMap",
-          data: { color: e.color || "#6366f1" },
+          data: { color: e.color || "#0084ff" },
           animated: e.animated,
         }));
 
@@ -176,7 +227,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
               text: n.data.text || "Untitled",
               description: n.data.description || null,
               icon: n.data.icon || null,
-              color: n.data.color || "#6366f1",
+              color: n.data.color || "#0084ff",
               positionX: n.position.x,
               positionY: n.position.y,
               collapsed: Boolean(n.data.collapsed),
@@ -193,7 +244,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
             id: e.id,
             source: e.source,
             target: e.target,
-            color: (e.data as any)?.color || "#6366f1",
+            color: (e.data as any)?.color || "#0084ff",
             animated: Boolean(e.animated),
           }));
 
@@ -216,7 +267,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     [projectId]
   );
 
-  // 3. Update Node Box Width via Right Edge Dot Dragging
+  // 3. Update Node Box Width via Corner / Edge Dragging
   const handleUpdateNodeWidth = React.useCallback(
     (nodeId: string, width: number) => {
       const nextNodes = nodes.map((n) =>
@@ -248,18 +299,61 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     [nodes, edges, triggerAutosave]
   );
 
+  // Helper: Build hierarchy tree
+  const getSubtreeDescendants = React.useCallback(
+    (parentId: string): string[] => {
+      const childrenMap = new Map<string, string[]>();
+      nodes.forEach((n) => childrenMap.set(n.id, []));
+      edges.forEach((e) => {
+        const list = childrenMap.get(e.source) || [];
+        if (!list.includes(e.target)) {
+          list.push(e.target);
+          childrenMap.set(e.source, list);
+        }
+      });
+
+      const getRecursive = (id: string): string[] => {
+        const direct = childrenMap.get(id) || [];
+        let all = [...direct];
+        for (const childId of direct) {
+          all = all.concat(getRecursive(childId));
+        }
+        return all;
+      };
+
+      return getRecursive(parentId);
+    },
+    [nodes, edges]
+  );
+
   // 5. Node CRUD & Tree Operations
   const handleAddChild = React.useCallback(
-    (parentId?: string, direction: "right" | "left" = "right") => {
-      const parent = parentId ? nodes.find((n) => n.id === parentId) : nodes.find((n) => n.selected) || nodes[0];
+    (parentId?: string, direction?: "right" | "left") => {
+      const parent = parentId
+        ? nodes.find((n) => n.id === parentId)
+        : nodes.find((n) => n.id === selectedNodeId || n.selected) || nodes[0];
       if (!parent) return;
 
+      const rootNode = nodes.find((n) => n.data.isRoot || !n.data.parentId) || nodes[0];
       const newId = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const branchColor = parent.data.color || "#6366f1";
-      const siblingCount = edges.filter((e) => e.source === parent.id).length;
+      const branchColor = parent.data.color || "#0084ff";
 
-      const xOffset = direction === "right" ? 280 : -280;
-      const yOffset = siblingCount === 0 ? 0 : (siblingCount % 2 === 1 ? 1 : -1) * Math.ceil(siblingCount / 2) * 90;
+      // Determine horizontal side: Right if right of root, Left if left of root
+      let side: "right" | "left" = direction || "right";
+      if (!direction) {
+        if (parent.id === rootNode.id) {
+          const directCount = edges.filter((e) => e.source === parent.id).length;
+          side = directCount % 2 === 0 ? "right" : "left";
+        } else {
+          side = parent.position.x >= rootNode.position.x ? "right" : "left";
+        }
+      }
+
+      const siblingCount = edges.filter((e) => e.source === parent.id).length;
+      const parentWidth = parent.data.customWidth || (parent.data.isRoot ? 240 : 180);
+      const xOffset = side === "right" ? parentWidth + 70 : -(220 + 70);
+      const yOffset =
+        siblingCount === 0 ? 0 : (siblingCount % 2 === 1 ? 1 : -1) * Math.ceil(siblingCount / 2) * 85;
 
       const newNode: Node<MindMapNodeData> = {
         id: newId,
@@ -271,7 +365,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
         data: {
           text: "New Sub-topic",
           description: "",
-          icon: "💡",
+          icon: null,
           color: branchColor,
           parentId: parent.id,
           collapsed: false,
@@ -288,7 +382,11 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
         animated: true,
       };
 
-      const nextNodes = [...nodes, newNode];
+      // If parent was collapsed, unfold parent so new child is visible
+      const nextNodes = nodes.map((n) =>
+        n.id === parent.id ? { ...n, data: { ...n.data, collapsed: false } } : n
+      );
+      nextNodes.push(newNode);
       const nextEdges = [...edges, newEdge];
 
       recordHistory(nodes, edges);
@@ -297,7 +395,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       setSelectedNodeId(newId);
       triggerAutosave(nextNodes, nextEdges);
     },
-    [nodes, edges, recordHistory, setNodes, setEdges, triggerAutosave]
+    [nodes, edges, selectedNodeId, recordHistory, setNodes, setEdges, triggerAutosave]
   );
 
   const handleAddSibling = React.useCallback(() => {
@@ -309,39 +407,14 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     handleAddChild(selected.data.parentId);
   }, [nodes, selectedNodeId, handleAddChild]);
 
-  const handleDeleteSelected = React.useCallback(
-    (targetId?: string) => {
-      const selectedIds = targetId
-        ? [targetId]
-        : nodes.filter((n) => n.selected).map((n) => n.id);
+  // Execute node deletion
+  const executeDelete = React.useCallback(
+    (targetId: string) => {
+      const node = nodes.find((n) => n.id === targetId);
+      if (!node || node.data.isRoot) return;
 
-      if (selectedIds.length === 0 && selectedNodeId) {
-        selectedIds.push(selectedNodeId);
-      }
-
-      if (selectedIds.length === 0) return;
-
-      const filteredSelected = selectedIds.filter((id) => {
-        const node = nodes.find((n) => n.id === id);
-        return node && !node.data.isRoot;
-      });
-
-      if (filteredSelected.length === 0) {
-        toast.info("Root idea cannot be deleted");
-        return;
-      }
-
-      const toDelete = new Set<string>(filteredSelected);
-      let changed = true;
-      while (changed) {
-        changed = false;
-        edges.forEach((e) => {
-          if (toDelete.has(e.source) && !toDelete.has(e.target)) {
-            toDelete.add(e.target);
-            changed = true;
-          }
-        });
-      }
+      const descendants = getSubtreeDescendants(targetId);
+      const toDelete = new Set<string>([targetId, ...descendants]);
 
       const nextNodes = nodes.filter((n) => !toDelete.has(n.id));
       const nextEdges = edges.filter(
@@ -353,9 +426,39 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       setEdges(nextEdges);
       setSelectedNodeId(null);
       triggerAutosave(nextNodes, nextEdges);
-      toast.success(`Removed ${toDelete.size} ${toDelete.size === 1 ? "node" : "nodes"}`);
+      toast.success(`Removed ${toDelete.size} ${toDelete.size === 1 ? "idea" : "ideas"}`);
     },
-    [nodes, edges, selectedNodeId, recordHistory, setNodes, setEdges, triggerAutosave]
+    [nodes, edges, getSubtreeDescendants, recordHistory, setNodes, setEdges, triggerAutosave]
+  );
+
+  const handleDeleteSelected = React.useCallback(
+    (targetId?: string) => {
+      const idToDelete = targetId || selectedNodeId || nodes.find((n) => n.selected)?.id;
+      if (!idToDelete) return;
+
+      const node = nodes.find((n) => n.id === idToDelete);
+      if (!node) return;
+
+      if (node.data.isRoot) {
+        toast.info("Central root idea cannot be deleted");
+        return;
+      }
+
+      const descendants = getSubtreeDescendants(idToDelete);
+      if (descendants.length > 0) {
+        // Prompt confirmation dialog before deleting entire branch
+        setDeleteModalState({
+          isOpen: true,
+          nodeId: idToDelete,
+          nodeTitle: node.data.text || "Untitled",
+          descendantCount: descendants.length,
+        });
+      } else {
+        // Leaf node: Delete immediately
+        executeDelete(idToDelete);
+      }
+    },
+    [selectedNodeId, nodes, getSubtreeDescendants, executeDelete]
   );
 
   const handleToggleCollapse = React.useCallback(
@@ -371,8 +474,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       recordHistory(nodes, edges);
       setNodes(nextNodes);
       triggerAutosave(nextNodes, edges);
-
-      toast.info(newCollapsed ? "Subtree folded (collapsed)" : "Subtree unfolded (expanded)");
+      toast.info(newCollapsed ? "Branch collapsed" : "Branch expanded");
     },
     [nodes, edges, recordHistory, setNodes, triggerAutosave]
   );
@@ -421,49 +523,84 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     [nodes, edges, recordHistory, setNodes, setEdges, triggerAutosave]
   );
 
+  // Duplicate node and its entire subtree
   const handleDuplicateNode = React.useCallback(
     (nodeId: string) => {
       const source = nodes.find((n) => n.id === nodeId);
       if (!source) return;
 
-      const newId = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const newNode: Node<MindMapNodeData> = {
-        ...source,
-        id: newId,
-        position: {
-          x: source.position.x + 40,
-          y: source.position.y + 60,
-        },
-        data: {
-          ...source.data,
-          text: `${source.data.text} (Copy)`,
-          isRoot: false,
-        },
-      };
+      const idMap = new Map<string, string>();
+      const descendants = getSubtreeDescendants(nodeId);
+      const allSubtreeIds = [nodeId, ...descendants];
 
-      let newEdge: Edge | null = null;
+      allSubtreeIds.forEach((oldId) => {
+        idMap.set(oldId, `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+      });
+
+      const duplicatedNodes: Node<MindMapNodeData>[] = allSubtreeIds
+        .map((oldId) => {
+          const original = nodes.find((n) => n.id === oldId);
+          if (!original) return null;
+
+          const newId = idMap.get(oldId)!;
+          const isTop = oldId === nodeId;
+          const newParentId = isTop
+            ? original.data.parentId
+            : idMap.get(original.data.parentId || "") || original.data.parentId;
+
+          return {
+            ...original,
+            id: newId,
+            position: {
+              x: original.position.x + 50,
+              y: original.position.y + 60,
+            },
+            data: {
+              ...original.data,
+              text: isTop ? `${original.data.text} (Copy)` : original.data.text,
+              parentId: newParentId,
+              isRoot: false,
+            },
+          };
+        })
+        .filter(Boolean) as Node<MindMapNodeData>[];
+
+      const duplicatedEdges: Edge[] = [];
       if (source.data.parentId) {
-        newEdge = {
-          id: `edge_${source.data.parentId}_${newId}`,
+        duplicatedEdges.push({
+          id: `edge_${source.data.parentId}_${idMap.get(nodeId)}`,
           source: source.data.parentId,
-          target: newId,
+          target: idMap.get(nodeId)!,
           type: "mindMap",
           data: { color: source.data.color || "#0084ff" },
           animated: true,
-        };
+        });
       }
 
-      const nextNodes = [...nodes, newNode];
-      const nextEdges = newEdge ? [...edges, newEdge] : edges;
+      edges.forEach((e) => {
+        if (idMap.has(e.source) && idMap.has(e.target)) {
+          duplicatedEdges.push({
+            id: `edge_${idMap.get(e.source)}_${idMap.get(e.target)}`,
+            source: idMap.get(e.source)!,
+            target: idMap.get(e.target)!,
+            type: "mindMap",
+            data: { color: (e.data as any)?.color || "#0084ff" },
+            animated: true,
+          });
+        }
+      });
+
+      const nextNodes = [...nodes, ...duplicatedNodes];
+      const nextEdges = [...edges, ...duplicatedEdges];
 
       recordHistory(nodes, edges);
       setNodes(nextNodes);
       setEdges(nextEdges);
-      setSelectedNodeId(newId);
+      setSelectedNodeId(idMap.get(nodeId)!);
       triggerAutosave(nextNodes, nextEdges);
-      toast.success("Node duplicated");
+      toast.success("Subtree duplicated");
     },
-    [nodes, edges, recordHistory, setNodes, setEdges, triggerAutosave]
+    [nodes, edges, getSubtreeDescendants, recordHistory, setNodes, setEdges, triggerAutosave]
   );
 
   const handleRecolor = React.useCallback(
@@ -480,7 +617,6 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       if (targetIds.length === 0) return;
 
       const targetSet = new Set(targetIds);
-
       let changed = true;
       while (changed) {
         changed = false;
@@ -510,25 +646,77 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     [nodes, edges, selectedNodeId, recordHistory, setNodes, setEdges, triggerAutosave]
   );
 
-  // 6. Drag-and-Drop Reparenting
+  // 6. Subtree Dragging & Drag-and-Drop Reparenting
+  const onNodesChangeWithSubtree = React.useCallback(
+    (changes: NodeChange<Node<MindMapNodeData>>[]) => {
+      setNodes((currentNodes) => {
+        let updatedNodes = applyNodeChanges(changes, currentNodes);
+
+        // For position changes, calculate delta and move descendant subtree synchronously
+        changes.forEach((change) => {
+          if (change.type === "position" && change.position && change.dragging) {
+            const prevNode = currentNodes.find((n) => n.id === change.id);
+            if (prevNode) {
+              const dx = change.position.x - prevNode.position.x;
+              const dy = change.position.y - prevNode.position.y;
+
+              if (dx !== 0 || dy !== 0) {
+                const descendants = getSubtreeDescendants(change.id);
+                if (descendants.length > 0) {
+                  const descSet = new Set(descendants);
+                  updatedNodes = updatedNodes.map((n) =>
+                    descSet.has(n.id)
+                      ? {
+                          ...n,
+                          position: {
+                            x: n.position.x + dx,
+                            y: n.position.y + dy,
+                          },
+                        }
+                      : n
+                  );
+                }
+              }
+            }
+          }
+        });
+
+        return updatedNodes;
+      });
+    },
+    [getSubtreeDescendants, setNodes]
+  );
+
   const onNodeDrag = React.useCallback(
     (_: any, node: Node) => {
       const overlapNode = nodes.find(
         (n) =>
           n.id !== node.id &&
-          Math.abs(n.position.x - node.position.x) < 80 &&
-          Math.abs(n.position.y - node.position.y) < 50
+          Math.abs(n.position.x - node.position.x) < 90 &&
+          Math.abs(n.position.y - node.position.y) < 60
       );
+
+      // Prevent dropping on own descendant
+      if (overlapNode) {
+        const descendants = getSubtreeDescendants(node.id);
+        if (descendants.includes(overlapNode.id)) {
+          setDragOverNodeId(null);
+          return;
+        }
+      }
+
       setDragOverNodeId(overlapNode ? overlapNode.id : null);
     },
-    [nodes]
+    [nodes, getSubtreeDescendants]
   );
 
   const onNodeDragStop = React.useCallback(
     (_: any, node: Node) => {
       if (dragOverNodeId && dragOverNodeId !== node.id) {
         const newParent = nodes.find((n) => n.id === dragOverNodeId);
-        if (newParent && !node.data.isRoot) {
+        const descendants = getSubtreeDescendants(node.id);
+
+        if (newParent && !node.data.isRoot && !descendants.includes(newParent.id)) {
           const nextNodes = nodes.map((n) =>
             n.id === node.id
               ? {
@@ -548,7 +736,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
             source: newParent.id,
             target: node.id,
             type: "mindMap",
-            data: { color: newParent.data.color || "#6366f1" },
+            data: { color: newParent.data.color || "#0084ff" },
             animated: true,
           };
 
@@ -565,7 +753,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       }
       setDragOverNodeId(null);
     },
-    [dragOverNodeId, nodes, edges, recordHistory, setNodes, setEdges, triggerAutosave]
+    [dragOverNodeId, nodes, edges, getSubtreeDescendants, recordHistory, setNodes, setEdges, triggerAutosave]
   );
 
   // 7. Undo / Redo
@@ -613,7 +801,44 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     [nodes, edges, reactFlowInstance, recordHistory, setNodes, setEdges, triggerAutosave]
   );
 
-  // 9. Global Keyboard Shortcuts
+  // 9. Arrow Key Navigation
+  const handleArrowNavigation = React.useCallback(
+    (direction: "left" | "right" | "up" | "down") => {
+      if (!selectedNodeId) return;
+      const current = nodes.find((n) => n.id === selectedNodeId);
+      if (!current) return;
+
+      const children = edges.filter((e) => e.source === current.id).map((e) => e.target);
+      const siblings = current.data.parentId
+        ? edges.filter((e) => e.source === current.data.parentId).map((e) => e.target)
+        : [];
+
+      let nextTargetId: string | null = null;
+
+      if (direction === "right") {
+        if (children.length > 0) {
+          nextTargetId = children[Math.floor(children.length / 2)];
+        }
+      } else if (direction === "left") {
+        if (current.data.parentId) {
+          nextTargetId = current.data.parentId;
+        }
+      } else if (direction === "up") {
+        const index = siblings.indexOf(current.id);
+        if (index > 0) nextTargetId = siblings[index - 1];
+      } else if (direction === "down") {
+        const index = siblings.indexOf(current.id);
+        if (index >= 0 && index < siblings.length - 1) nextTargetId = siblings[index + 1];
+      }
+
+      if (nextTargetId) {
+        setSelectedNodeId(nextTargetId);
+      }
+    },
+    [selectedNodeId, nodes, edges]
+  );
+
+  // 10. Global Keyboard Shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) {
@@ -627,7 +852,12 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
         e.preventDefault();
         handleAddSibling();
       } else if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
         handleDeleteSelected();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setSelectedNodeId(null);
+        setContextMenuState((prev) => ({ ...prev, isOpen: false }));
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) {
@@ -638,19 +868,37 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
         e.preventDefault();
         handleRedo();
-      } else if ((e.key === " " || e.key === "/") && selectedNodeId) {
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d") {
         e.preventDefault();
-        handleToggleCollapse(selectedNodeId);
+        if (selectedNodeId) handleDuplicateNode(selectedNodeId);
+      } else if (e.key === " " || e.key === "/") {
+        if (selectedNodeId) {
+          e.preventDefault();
+          handleToggleCollapse(selectedNodeId);
+        }
+      } else if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+        e.preventDefault();
+        const dir = e.key.replace("Arrow", "").toLowerCase() as "up" | "down" | "left" | "right";
+        handleArrowNavigation(dir);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleAddChild, handleAddSibling, handleDeleteSelected, handleUndo, handleRedo, selectedNodeId, handleToggleCollapse]);
+  }, [
+    handleAddChild,
+    handleAddSibling,
+    handleDeleteSelected,
+    handleUndo,
+    handleRedo,
+    handleDuplicateNode,
+    selectedNodeId,
+    handleToggleCollapse,
+    handleArrowNavigation,
+  ]);
 
   // Subtree calculation: Map children and recursively hide descendants of collapsed nodes
   const { decoratedNodes, decoratedEdges } = React.useMemo(() => {
-    // 1. Build adjacency map (parent -> direct child node IDs)
     const childrenMap = new Map<string, string[]>();
     nodes.forEach((n) => childrenMap.set(n.id, []));
     edges.forEach((e) => {
@@ -661,7 +909,6 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       }
     });
 
-    // 2. Recursive helper to fetch all descendant IDs for a node
     const getDescendants = (parentId: string): string[] => {
       const direct = childrenMap.get(parentId) || [];
       let all: string[] = [...direct];
@@ -671,7 +918,6 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       return all;
     };
 
-    // 3. Collect all node IDs that belong to any collapsed parent's subtree
     const hiddenNodeIds = new Set<string>();
     nodes.forEach((n) => {
       if (n.data?.collapsed) {
@@ -680,7 +926,6 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       }
     });
 
-    // 4. Decorate nodes with visibility, child counts, and callbacks
     const decoratedNodesList = nodes.map((node) => {
       const directChildren = childrenMap.get(node.id) || [];
       const totalDescendants = getDescendants(node.id);
@@ -689,6 +934,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       return {
         ...node,
         hidden: isHidden,
+        selected: node.id === selectedNodeId || Boolean(node.selected),
         data: {
           ...node.data,
           canvasFont,
@@ -709,7 +955,6 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       };
     });
 
-    // 5. Decorate edges with visibility (hidden if either source or target is hidden)
     const decoratedEdgesList = edges.map((edge) => {
       const isHidden = hiddenNodeIds.has(edge.source) || hiddenNodeIds.has(edge.target);
       return {
@@ -725,6 +970,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
   }, [
     nodes,
     edges,
+    selectedNodeId,
     dragOverNodeId,
     canvasFont,
     handleAddChild,
@@ -741,7 +987,10 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
   }, [nodes, selectedNodeId]);
 
   return (
-    <div className={`relative w-full h-screen overflow-hidden bg-background ${getFontClass(canvasFont)}`}>
+    <div
+      onClick={() => setContextMenuState((prev) => ({ ...prev, isOpen: false }))}
+      className={`relative w-full h-screen overflow-hidden bg-background ${getFontClass(canvasFont)}`}
+    >
       {/* Editor Top Navigation */}
       <EditorTopNav
         project={project}
@@ -771,12 +1020,28 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
         edges={decoratedEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        onNodesChange={onNodesChange}
+        onNodesChange={onNodesChangeWithSubtree}
         onEdgesChange={onEdgesChange}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
-        onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-        onPaneClick={() => setSelectedNodeId(null)}
+        onNodeClick={(_, node) => {
+          setSelectedNodeId(node.id);
+          setContextMenuState((prev) => ({ ...prev, isOpen: false }));
+        }}
+        onPaneClick={() => {
+          setSelectedNodeId(null);
+          setContextMenuState((prev) => ({ ...prev, isOpen: false }));
+        }}
+        onNodeContextMenu={(event, node) => {
+          event.preventDefault();
+          setSelectedNodeId(node.id);
+          setContextMenuState({
+            isOpen: true,
+            x: event.clientX,
+            y: event.clientY,
+            nodeId: node.id,
+          });
+        }}
         onInit={setReactFlowInstance}
         selectionMode={SelectionMode.Partial}
         panOnScroll
@@ -799,7 +1064,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
         {/* Minimap in bottom-right corner */}
         {showMinimap && (
           <MiniMap
-            nodeColor={(n) => ((n.data as any)?.color as string) || "#6366f1"}
+            nodeColor={(n) => ((n.data as any)?.color as string) || "#0084ff"}
             nodeStrokeWidth={3}
             maskColor={isDark ? "rgba(14, 15, 18, 0.75)" : "rgba(251, 251, 250, 0.75)"}
             className="!rounded-xl !border !border-border/80 !shadow-xl !overflow-hidden !bg-card/90 backdrop-blur-xs !bottom-6 !right-6 hidden sm:block"
@@ -808,16 +1073,6 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
           />
         )}
       </ReactFlow>
-
-      {/* Onboarding / Empty State Hint Pill */}
-      {nodes.length <= 1 && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-card/95 border border-primary/40 shadow-lg text-xs font-medium text-foreground backdrop-blur-md">
-            <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
-            <span>Click any node and press <kbd className="px-1.5 py-0.5 rounded bg-muted border border-border text-[10px] font-mono">Tab</kbd> to add subtopics</span>
-          </div>
-        </div>
-      )}
 
       {/* Floating Toolbar with Canva-style tools & Font selector */}
       <FloatingToolbar
@@ -845,18 +1100,154 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
           node={selectedNode}
           onClose={() => setSelectedNodeId(null)}
           onUpdate={(id, updates) => {
-            const nextNodes = nodes.map((n) =>
-              n.id === id ? { ...n, data: { ...n.data, ...updates } } : n
-            );
-            recordHistory(nodes, edges);
-            setNodes(nextNodes);
-            triggerAutosave(nextNodes, edges);
+            handleUpdateNodeData(id, updates);
           }}
           onDelete={(id) => handleDeleteSelected(id)}
           onAddChild={(id) => handleAddChild(id)}
           onToggleCollapse={(id) => handleToggleCollapse(id)}
         />
       )}
+
+      {/* Right-Click Context Menu */}
+      {contextMenuState.isOpen && contextMenuState.nodeId && (
+        <div
+          style={{ top: `${contextMenuState.y}px`, left: `${contextMenuState.x}px` }}
+          className="fixed z-50 w-52 rounded-xl border border-border/80 bg-card/95 backdrop-blur-md shadow-2xl p-1 text-xs text-foreground space-y-0.5 animate-in fade-in zoom-in-95 duration-100"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              handleAddChild(contextMenuState.nodeId!);
+              setContextMenuState((prev) => ({ ...prev, isOpen: false }));
+            }}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors text-left"
+          >
+            <div className="flex items-center gap-2">
+              <Plus className="h-3.5 w-3.5 text-primary" />
+              <span>Add Child</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground font-mono">Tab</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              handleAddSibling();
+              setContextMenuState((prev) => ({ ...prev, isOpen: false }));
+            }}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors text-left"
+          >
+            <div className="flex items-center gap-2">
+              <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>Add Sibling</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground font-mono">Enter</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              handleDuplicateNode(contextMenuState.nodeId!);
+              setContextMenuState((prev) => ({ ...prev, isOpen: false }));
+            }}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-muted transition-colors text-left"
+          >
+            <div className="flex items-center gap-2">
+              <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>Duplicate Subtree</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground font-mono">Ctrl+D</span>
+          </button>
+
+          {nodes.find((n) => n.id === contextMenuState.nodeId)?.data.childCount ? (
+            <button
+              type="button"
+              onClick={() => {
+                handleToggleCollapse(contextMenuState.nodeId!);
+                setContextMenuState((prev) => ({ ...prev, isOpen: false }));
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-muted transition-colors text-left"
+            >
+              <div className="flex items-center gap-2">
+                {nodes.find((n) => n.id === contextMenuState.nodeId)?.data.collapsed ? (
+                  <UnfoldHorizontal className="h-3.5 w-3.5 text-primary" />
+                ) : (
+                  <FoldHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+                <span>
+                  {nodes.find((n) => n.id === contextMenuState.nodeId)?.data.collapsed
+                    ? "Expand Branch"
+                    : "Collapse Branch"}
+                </span>
+              </div>
+              <span className="text-[10px] text-muted-foreground font-mono">Space</span>
+            </button>
+          ) : null}
+
+          <div className="h-px bg-border/80 my-1" />
+
+          {!nodes.find((n) => n.id === contextMenuState.nodeId)?.data.isRoot && (
+            <button
+              type="button"
+              onClick={() => {
+                handleDeleteSelected(contextMenuState.nodeId!);
+                setContextMenuState((prev) => ({ ...prev, isOpen: false }));
+              }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors text-left"
+            >
+              <div className="flex items-center gap-2">
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete</span>
+              </div>
+              <span className="text-[10px] text-muted-foreground font-mono">Del</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Subtree Deletion Confirmation Modal */}
+      <Dialog
+        open={deleteModalState.isOpen}
+        onOpenChange={(open) =>
+          setDeleteModalState((prev) => ({ ...prev, isOpen: open }))
+        }
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
+              <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+              <span>Delete branch subtree?</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground leading-relaxed pt-1">
+              Deleting &quot;<strong className="text-foreground">{deleteModalState.nodeTitle}</strong>&quot; will also remove its{" "}
+              <strong className="text-foreground">{deleteModalState.descendantCount} connected sub-topics</strong>. You can undo this change anytime with <kbd className="px-1 py-0.5 rounded border border-border bg-muted text-[10px]">Ctrl+Z</kbd>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteModalState((prev) => ({ ...prev, isOpen: false }))}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (deleteModalState.nodeId) {
+                  executeDelete(deleteModalState.nodeId);
+                }
+                setDeleteModalState((prev) => ({ ...prev, isOpen: false }));
+              }}
+            >
+              Delete Subtree
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Share & Permissions Modal */}
       <ShareModal
