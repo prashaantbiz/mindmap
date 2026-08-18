@@ -12,11 +12,8 @@ import { FONT_OPTIONS } from "@/lib/fonts";
 import { toast } from "sonner";
 import {
   X,
-  Sliders,
   Trash2,
-  GitBranch,
   Plus,
-  Network,
   Palette,
   Smile,
   Image as ImageIcon,
@@ -24,16 +21,14 @@ import {
   Link2,
   ExternalLink,
   UploadCloud,
-  Play,
-  FileText,
-  Sparkles,
   Type,
   AlignLeft,
   AlignCenter,
   AlignRight,
   Italic,
-  Maximize2,
   Scaling,
+  FoldHorizontal,
+  UnfoldHorizontal,
 } from "lucide-react";
 
 interface NodeInspectorPanelProps {
@@ -46,6 +41,8 @@ interface NodeInspectorPanelProps {
       color?: string;
       isRoot?: boolean;
       childCount?: number;
+      hiddenSubtreeCount?: number;
+      collapsed?: boolean;
       parentId?: string | null;
       imageUrl?: string | null;
       videoUrl?: string | null;
@@ -76,10 +73,12 @@ interface NodeInspectorPanelProps {
       fontSize: string | null;
       fontStyle: string | null;
       textAlign: string | null;
+      collapsed: boolean;
     }>
   ) => void;
   onDelete: (id: string) => void;
   onAddChild: (id: string) => void;
+  onToggleCollapse?: (id: string) => void;
 }
 
 const EMOJI_OPTIONS = ["💡", "🎯", "⚡", "🔍", "📚", "🚀", "🔥", "⭐", "🛠️", "📊", "🧠", "✨"];
@@ -91,6 +90,7 @@ export function NodeInspectorPanel({
   onUpdate,
   onDelete,
   onAddChild,
+  onToggleCollapse,
 }: NodeInspectorPanelProps) {
   const [isUploading, setIsUploading] = React.useState(false);
   const [dragOverUpload, setDragOverUpload] = React.useState(false);
@@ -100,6 +100,9 @@ export function NodeInspectorPanel({
 
   const { data, id } = node;
   const isRoot = data.isRoot || !data.parentId;
+  const childCount = data.childCount || 0;
+  const hiddenCount = data.hiddenSubtreeCount || childCount;
+  const hasChildren = childCount > 0 || Boolean(data.collapsed);
 
   // File Upload Handler
   const handleFileUpload = async (file: File) => {
@@ -152,7 +155,7 @@ export function NodeInspectorPanel({
             style={{ backgroundColor: data.color || "#6366f1" }}
           />
           <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
-            {isRoot ? "Root Node" : "Node Inspector"}
+            {isRoot ? "Root Idea" : "Node Inspector"}
           </h3>
         </div>
         <Button
@@ -165,7 +168,7 @@ export function NodeInspectorPanel({
         </Button>
       </div>
 
-      {/* Tabs Layout */}
+      {/* Tabs */}
       <Tabs defaultValue="content" className="w-full">
         <TabsList className="grid grid-cols-3 h-8 p-0.5 bg-muted/50 rounded-xl mb-3">
           <TabsTrigger value="content" className="text-[11px] h-7 rounded-lg font-medium">
@@ -213,37 +216,101 @@ export function NodeInspectorPanel({
             />
           </div>
 
-          {/* Node Box Width Slider */}
-          <div className="p-2.5 rounded-xl border border-border/70 bg-muted/20 space-y-1.5">
+          {/* Node Box Width Slider & Presets (Canva / MindMeister style) */}
+          <div className="p-2.5 rounded-xl border border-border/70 bg-muted/20 space-y-2">
             <div className="flex items-center justify-between text-[11px]">
               <Label className="font-semibold text-foreground flex items-center gap-1">
                 <Scaling className="h-3.5 w-3.5 text-primary" />
-                <span>Node Box Width</span>
+                <span>Box & Image Width</span>
               </Label>
-              <span className="text-primary font-mono font-semibold text-[10px]">
+              <span className="text-primary font-mono font-bold text-[11px] bg-primary/10 px-1.5 py-0.5 rounded-md">
                 {currentBoxWidth}px
               </span>
             </div>
+
             <input
               type="range"
-              min={180}
-              max={800}
+              min={160}
+              max={880}
               step={10}
               value={currentBoxWidth}
               onChange={(e) => onUpdate(id, { customWidth: Number(e.target.value) })}
               className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
             />
-            <p className="text-[10px] text-muted-foreground italic">
-              💡 Tip: You can also drag the right edge dot on the node box!
+
+            {/* Quick Presets */}
+            <div className="grid grid-cols-4 gap-1 pt-0.5">
+              {[
+                { label: "Compact", width: 200 },
+                { label: "Standard", width: 300 },
+                { label: "Wide", width: 460 },
+                { label: "Full", width: 680 },
+              ].map((p) => (
+                <button
+                  key={p.width}
+                  type="button"
+                  onClick={() => onUpdate(id, { customWidth: p.width })}
+                  className={`text-[10px] py-1 px-1 rounded-md border text-center transition-all ${
+                    currentBoxWidth === p.width
+                      ? "border-primary bg-primary/15 text-primary font-bold"
+                      : "border-border/70 hover:border-border hover:bg-muted/40 text-muted-foreground"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            <p className="text-[10px] text-muted-foreground italic flex items-center gap-1">
+              <span>💡 You can also drag the right edge handle directly on canvas!</span>
             </p>
           </div>
+
+          {/* Subtree Collapse / Expand Controls */}
+          {hasChildren && (
+            <div className="p-2.5 rounded-xl border border-border/70 bg-muted/20 space-y-2">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-semibold text-foreground flex items-center gap-1">
+                  {data.collapsed ? (
+                    <FoldHorizontal className="h-3.5 w-3.5 text-primary" />
+                  ) : (
+                    <UnfoldHorizontal className="h-3.5 w-3.5 text-emerald-500" />
+                  )}
+                  <span>Subtree Folding</span>
+                </span>
+                <Badge variant={data.collapsed ? "secondary" : "outline"} className="text-[10px] h-4.5 px-1.5">
+                  {data.collapsed ? `${hiddenCount} collapsed` : `${childCount} direct children`}
+                </Badge>
+              </div>
+
+              <Button
+                type="button"
+                variant={data.collapsed ? "default" : "outline"}
+                size="sm"
+                onClick={() => onToggleCollapse?.(id)}
+                className="w-full h-8 text-xs font-semibold gap-1.5 shadow-xs"
+              >
+                {data.collapsed ? (
+                  <>
+                    <UnfoldHorizontal className="h-3.5 w-3.5" />
+                    <span>Expand Branch (+{hiddenCount} ideas)</span>
+                  </>
+                ) : (
+                  <>
+                    <FoldHorizontal className="h-3.5 w-3.5" />
+                    <span>Collapse Branch (Fold subtree)</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
 
           {/* Typography Customization */}
           <div className="p-2.5 rounded-xl border border-border/70 bg-muted/20 space-y-2.5">
             <div className="flex items-center justify-between">
               <Label className="text-[11px] font-semibold text-foreground flex items-center gap-1">
                 <Type className="h-3.5 w-3.5 text-primary" />
-                <span>Font & Style</span>
+                <span>Font & Typography</span>
               </Label>
               {data.fontFamily && (
                 <button
@@ -492,7 +559,7 @@ export function NodeInspectorPanel({
                 {isUploading ? "Uploading..." : "Upload Image or Video"}
               </p>
               <p className="text-[10px] text-muted-foreground">
-                Image will display in its original natural aspect ratio
+                Image will display in its natural original aspect ratio
               </p>
             </div>
           </div>
@@ -582,9 +649,9 @@ export function NodeInspectorPanel({
       {/* Metadata & Quick Actions */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>Connected Children:</span>
+          <span>Direct Children:</span>
           <Badge variant="outline" className="text-[10px] h-4.5 px-1.5">
-            {data.childCount || 0} nodes
+            {childCount} {childCount === 1 ? "node" : "nodes"}
           </Badge>
         </div>
 
@@ -596,7 +663,7 @@ export function NodeInspectorPanel({
             className="h-8 text-xs font-semibold gap-1"
           >
             <Plus className="h-3.5 w-3.5 text-primary" />
-            Add Child
+            Add Child (Tab)
           </Button>
 
           {!isRoot && (

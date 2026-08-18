@@ -371,6 +371,8 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       recordHistory(nodes, edges);
       setNodes(nextNodes);
       triggerAutosave(nextNodes, edges);
+
+      toast.info(newCollapsed ? "Subtree folded (collapsed)" : "Subtree unfolded (expanded)");
     },
     [nodes, edges, recordHistory, setNodes, triggerAutosave]
   );
@@ -562,34 +564,97 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
         e.preventDefault();
         handleRedo();
+      } else if ((e.key === " " || e.key === "/") && selectedNodeId) {
+        e.preventDefault();
+        handleToggleCollapse(selectedNodeId);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleAddChild, handleAddSibling, handleDeleteSelected, handleUndo, handleRedo]);
+  }, [handleAddChild, handleAddSibling, handleDeleteSelected, handleUndo, handleRedo, selectedNodeId, handleToggleCollapse]);
 
-  // Helper to update child counts and callbacks on nodes
-  const decoratedNodes = React.useMemo(() => {
-    const childrenCountMap = new Map<string, number>();
+  // Subtree calculation: Map children and recursively hide descendants of collapsed nodes
+  const { decoratedNodes, decoratedEdges } = React.useMemo(() => {
+    // 1. Build adjacency map (parent -> direct child node IDs)
+    const childrenMap = new Map<string, string[]>();
+    nodes.forEach((n) => childrenMap.set(n.id, []));
     edges.forEach((e) => {
-      childrenCountMap.set(e.source, (childrenCountMap.get(e.source) || 0) + 1);
+      const list = childrenMap.get(e.source) || [];
+      if (!list.includes(e.target)) {
+        list.push(e.target);
+        childrenMap.set(e.source, list);
+      }
     });
 
-    return nodes.map((node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        canvasFont,
-        childCount: childrenCountMap.get(node.id) || 0,
-        isDropTarget: node.id === dragOverNodeId,
-        onAddChild: (parentId: string, direction?: "right" | "left") => handleAddChild(parentId, direction),
-        onToggleCollapse: (nodeId: string) => handleToggleCollapse(nodeId),
-        onUpdateText: (nodeId: string, text: string, desc?: string) => handleUpdateNodeText(nodeId, text, desc),
-        onUpdateNodeWidth: handleUpdateNodeWidth,
-      },
-    }));
-  }, [nodes, edges, dragOverNodeId, canvasFont, handleAddChild, handleToggleCollapse, handleUpdateNodeText, handleUpdateNodeWidth]);
+    // 2. Recursive helper to fetch all descendant IDs for a node
+    const getDescendants = (parentId: string): string[] => {
+      const direct = childrenMap.get(parentId) || [];
+      let all: string[] = [...direct];
+      for (const childId of direct) {
+        all = all.concat(getDescendants(childId));
+      }
+      return all;
+    };
+
+    // 3. Collect all node IDs that belong to any collapsed parent's subtree
+    const hiddenNodeIds = new Set<string>();
+    nodes.forEach((n) => {
+      if (n.data?.collapsed) {
+        const descendants = getDescendants(n.id);
+        descendants.forEach((id) => hiddenNodeIds.add(id));
+      }
+    });
+
+    // 4. Decorate nodes with visibility, child counts, and callbacks
+    const decoratedNodesList = nodes.map((node) => {
+      const directChildren = childrenMap.get(node.id) || [];
+      const totalDescendants = getDescendants(node.id);
+      const isHidden = hiddenNodeIds.has(node.id);
+
+      return {
+        ...node,
+        hidden: isHidden,
+        data: {
+          ...node.data,
+          canvasFont,
+          childCount: directChildren.length,
+          hiddenSubtreeCount: totalDescendants.length,
+          isDropTarget: node.id === dragOverNodeId,
+          onAddChild: (parentId: string, direction?: "right" | "left") =>
+            handleAddChild(parentId, direction),
+          onToggleCollapse: (nodeId: string) => handleToggleCollapse(nodeId),
+          onUpdateText: (nodeId: string, text: string, desc?: string) =>
+            handleUpdateNodeText(nodeId, text, desc),
+          onUpdateNodeWidth: handleUpdateNodeWidth,
+          onOpenInspector: (nodeId: string) => setSelectedNodeId(nodeId),
+        },
+      };
+    });
+
+    // 5. Decorate edges with visibility (hidden if either source or target is hidden)
+    const decoratedEdgesList = edges.map((edge) => {
+      const isHidden = hiddenNodeIds.has(edge.source) || hiddenNodeIds.has(edge.target);
+      return {
+        ...edge,
+        hidden: isHidden,
+      };
+    });
+
+    return {
+      decoratedNodes: decoratedNodesList,
+      decoratedEdges: decoratedEdgesList,
+    };
+  }, [
+    nodes,
+    edges,
+    dragOverNodeId,
+    canvasFont,
+    handleAddChild,
+    handleToggleCollapse,
+    handleUpdateNodeText,
+    handleUpdateNodeWidth,
+  ]);
 
   const selectedNode = React.useMemo(() => {
     return nodes.find((n) => n.id === selectedNodeId || n.selected) || null;
@@ -623,7 +688,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
       {/* Main React Flow Canvas */}
       <ReactFlow
         nodes={decoratedNodes}
-        edges={edges}
+        edges={decoratedEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
@@ -709,6 +774,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
           }}
           onDelete={(id) => handleDeleteSelected(id)}
           onAddChild={(id) => handleAddChild(id)}
+          onToggleCollapse={(id) => handleToggleCollapse(id)}
         />
       )}
 

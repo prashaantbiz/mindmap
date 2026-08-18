@@ -4,11 +4,9 @@ import * as React from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import {
   Plus,
-  ChevronRight,
-  ChevronDown,
+  Minus,
   Link2,
   ExternalLink,
-  Play,
 } from "lucide-react";
 import { parseMediaUrl } from "@/lib/media-parser";
 import { getFontClass } from "@/lib/fonts";
@@ -22,6 +20,7 @@ export type MindMapNodeData = {
   collapsed?: boolean;
   isRoot?: boolean;
   childCount?: number;
+  hiddenSubtreeCount?: number;
   isDropTarget?: boolean;
   imageUrl?: string | null;
   videoUrl?: string | null;
@@ -52,7 +51,7 @@ export function MindMapNodeComponent({
   const [editDesc, setEditDesc] = React.useState(data.description || "");
   const [isHovered, setIsHovered] = React.useState(false);
 
-  // Dynamic Node Box Width (resizable via right-edge dot)
+  // Dynamic Node Box Width (resizable via right-edge handle)
   const defaultWidth = data.isRoot ? 240 : data.imageUrl ? 280 : 200;
   const [currentWidth, setCurrentWidth] = React.useState<number>(
     data.customWidth || defaultWidth
@@ -60,6 +59,10 @@ export function MindMapNodeComponent({
   const [isResizing, setIsResizing] = React.useState(false);
 
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const resizeStartRef = React.useRef<{ startX: number; initialWidth: number }>({
+    startX: 0,
+    initialWidth: defaultWidth,
+  });
 
   React.useEffect(() => {
     setEditText(data.text || "New Idea");
@@ -98,42 +101,56 @@ export function MindMapNodeComponent({
     }
   };
 
-  // Drag-to-Resize Entire Node Box from Right Edge Dot
-  const handleResizeStart = (e: React.MouseEvent) => {
+  // Pointer-based Canva / MindMeister Drag-to-Resize Right Edge Handle
+  const handlePointerDownResize = (e: React.PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
     e.preventDefault();
+
+    const target = e.currentTarget;
+    target.setPointerCapture(e.pointerId);
+
     setIsResizing(true);
-
-    const startX = e.clientX;
-    const initialWidth = currentWidth;
-
-    const onMouseMove = (moveEvent: MouseEvent) => {
-      moveEvent.preventDefault();
-      const deltaX = moveEvent.clientX - startX;
-      const newWidth = Math.max(160, Math.min(850, initialWidth + deltaX));
-      setCurrentWidth(newWidth);
+    resizeStartRef.current = {
+      startX: e.clientX,
+      initialWidth: currentWidth,
     };
+  };
 
-    const onMouseUp = (upEvent: MouseEvent) => {
-      upEvent.preventDefault();
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-      setIsResizing(false);
+  const handlePointerMoveResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isResizing) return;
+    e.stopPropagation();
+    e.preventDefault();
 
-      const deltaX = upEvent.clientX - startX;
-      const finalWidth = Math.max(160, Math.min(850, initialWidth + deltaX));
-      if (data.onUpdateNodeWidth) {
-        data.onUpdateNodeWidth(id, finalWidth);
-      }
-    };
+    const deltaX = e.clientX - resizeStartRef.current.startX;
+    const newWidth = Math.max(160, Math.min(880, resizeStartRef.current.initialWidth + deltaX));
+    setCurrentWidth(newWidth);
+  };
 
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+  const handlePointerUpResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isResizing) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+
+    setIsResizing(false);
+    const deltaX = e.clientX - resizeStartRef.current.startX;
+    const finalWidth = Math.max(160, Math.min(880, resizeStartRef.current.initialWidth + deltaX));
+
+    if (data.onUpdateNodeWidth) {
+      data.onUpdateNodeWidth(id, finalWidth);
+    }
   };
 
   const nodeColor = data.color || "#6366f1";
   const isRoot = data.isRoot || !data.parentId;
-  const hasChildren = (data.childCount || 0) > 0;
+  const childCount = data.childCount || 0;
+  const hiddenCount = data.hiddenSubtreeCount || childCount;
+  const hasChildren = childCount > 0 || Boolean(data.collapsed);
 
   const fontClass = getFontClass(data.fontFamily || (data.canvasFont as string));
   const parsedVideo = parseMediaUrl(data.videoUrl);
@@ -286,7 +303,9 @@ export function MindMapNodeComponent({
         </div>
       )}
 
-      {/* Collapse / Expand Badge */}
+      {/* ========================================================================= */}
+      {/* 1. MINDMEISTER COLLAPSE / EXPAND TOGGLE (on right edge)                   */}
+      {/* ========================================================================= */}
       {hasChildren && (
         <button
           type="button"
@@ -294,45 +313,68 @@ export function MindMapNodeComponent({
             e.stopPropagation();
             data.onToggleCollapse?.(id);
           }}
-          className="absolute -right-3 top-1/2 -translate-y-1/2 h-5.5 px-1 rounded-full bg-background border border-border shadow-xs hover:border-primary flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-all z-20"
-          title={data.collapsed ? "Expand branch" : "Collapse branch"}
+          className={`nodrag nopan absolute -right-3.5 top-1/2 -translate-y-1/2 rounded-full border shadow-sm flex items-center justify-center transition-all z-30 ${
+            data.collapsed
+              ? "h-6 px-1.5 bg-primary text-primary-foreground border-primary shadow-md font-bold text-[10px] gap-0.5 hover:scale-110 active:scale-95"
+              : "h-5 w-5 bg-background text-muted-foreground hover:text-foreground hover:border-primary border-border hover:scale-110 active:scale-95"
+          }`}
+          title={
+            data.collapsed
+              ? `Expand branch (${hiddenCount} hidden ${hiddenCount === 1 ? "idea" : "ideas"})`
+              : "Collapse branch"
+          }
         >
           {data.collapsed ? (
             <>
-              <ChevronRight className="h-3 w-3 text-primary" />
-              <span className="font-semibold text-[9px] pr-0.5">{data.childCount}</span>
+              <Plus className="h-3 w-3 shrink-0 stroke-[2.5]" />
+              <span className="text-[9px] font-bold leading-none pr-0.5">{hiddenCount}</span>
             </>
           ) : (
-            <ChevronDown className="h-3 w-3" />
+            <Minus className="h-3 w-3 shrink-0 stroke-[2.5]" />
           )}
         </button>
       )}
 
-      {/* "+" Affix Hover Button for Quick Child Creation */}
+      {/* ========================================================================= */}
+      {/* 2. "+" BUTTON FOR QUICK CHILD CREATION (Bottom-Right)                     */}
+      {/* ========================================================================= */}
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
           data.onAddChild?.(id, "right");
         }}
-        className={`absolute -right-3.5 -bottom-2 h-6 w-6 rounded-full bg-primary text-primary-foreground shadow-md hover:scale-110 active:scale-95 flex items-center justify-center transition-all z-30 ${
+        className={`nodrag nopan absolute -right-2 -bottom-2.5 h-6 w-6 rounded-full bg-primary text-primary-foreground shadow-md hover:scale-110 active:scale-95 flex items-center justify-center transition-all z-30 ${
           isHovered && !data.collapsed ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"
         }`}
-        title="Add child node (Tab)"
+        title="Add child sub-topic (Tab)"
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
 
-      {/* RIGHT EDGE RESIZE DOT: Drag this dot to freely adjust size of the whole node and its image */}
-      {(selected || isHovered || isResizing) && (
+      {/* ========================================================================= */}
+      {/* 3. RIGHT-EDGE RESIZE HANDLE (Canva / MindMeister Smooth Width Adjustment) */}
+      {/* ========================================================================= */}
+      <div
+        onPointerDown={handlePointerDownResize}
+        onPointerMove={handlePointerMoveResize}
+        onPointerUp={handlePointerUpResize}
+        className={`nodrag nopan absolute -right-1.5 top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center z-40 transition-opacity ${
+          selected || isHovered || isResizing ? "opacity-100" : "opacity-0 hover:opacity-100"
+        }`}
+        title="Drag right edge to resize node box and image"
+      >
+        {/* Visual Grip Pill */}
         <div
-          onMouseDown={handleResizeStart}
-          className="absolute -right-2 top-1/2 -translate-y-1/2 h-4.5 w-4.5 rounded-full bg-primary text-primary-foreground border-2 border-background shadow-lg flex items-center justify-center cursor-ew-resize hover:scale-125 active:scale-95 transition-all z-40"
-          title="Drag this dot to resize the entire node box and image"
-        >
-          <span className="h-1.5 w-1.5 rounded-full bg-background" />
-        </div>
-      )}
+          className={`w-1.5 h-8 rounded-full transition-all shadow-sm ${
+            isResizing
+              ? "bg-primary w-2 h-10 ring-2 ring-primary/40 shadow-md"
+              : selected
+              ? "bg-primary/80 hover:bg-primary hover:h-10 hover:w-2"
+              : "bg-muted-foreground/40 hover:bg-primary hover:h-10 hover:w-2"
+          }`}
+        />
+      </div>
 
       {/* Source Handles */}
       <Handle
