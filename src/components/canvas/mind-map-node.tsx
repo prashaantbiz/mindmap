@@ -2,14 +2,10 @@
 
 import * as React from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
-import {
-  Plus,
-  Minus,
-  Link2,
-  ExternalLink,
-} from "lucide-react";
+import { Plus, Link2, ExternalLink } from "lucide-react";
 import { parseMediaUrl } from "@/lib/media-parser";
 import { getFontClass } from "@/lib/fonts";
+import { FloatingNodeToolbar } from "./floating-node-toolbar";
 
 export type MindMapNodeData = {
   text: string;
@@ -37,7 +33,9 @@ export type MindMapNodeData = {
   onToggleCollapse?: (nodeId: string) => void;
   onUpdateText?: (nodeId: string, text: string, description?: string) => void;
   onUpdateNodeWidth?: (nodeId: string, width: number) => void;
-  onOpenInspector?: (nodeId: string) => void;
+  onUpdateNodeData?: (nodeId: string, updates: Record<string, unknown>) => void;
+  onDeleteNode?: (nodeId: string) => void;
+  onDuplicateNode?: (nodeId: string) => void;
   [key: string]: unknown;
 };
 
@@ -51,8 +49,8 @@ export function MindMapNodeComponent({
   const [editDesc, setEditDesc] = React.useState(data.description || "");
   const [isHovered, setIsHovered] = React.useState(false);
 
-  // Dynamic Node Box Width (resizable via right-edge handle)
-  const defaultWidth = data.isRoot ? 240 : data.imageUrl ? 280 : 200;
+  // Dynamic Node Box Width
+  const defaultWidth = data.isRoot ? 240 : data.imageUrl ? 280 : 180;
   const [currentWidth, setCurrentWidth] = React.useState<number>(
     data.customWidth || defaultWidth
   );
@@ -73,7 +71,7 @@ export function MindMapNodeComponent({
     if (data.customWidth) {
       setCurrentWidth(data.customWidth);
     } else {
-      setCurrentWidth(data.isRoot ? 240 : data.imageUrl ? 280 : 200);
+      setCurrentWidth(data.isRoot ? 240 : data.imageUrl ? 280 : 180);
     }
   }, [data.customWidth, data.imageUrl, data.isRoot]);
 
@@ -101,8 +99,10 @@ export function MindMapNodeComponent({
     }
   };
 
-  // Pointer-based Canva / MindMeister Drag-to-Resize Right Edge Handle
-  const handlePointerDownResize = (e: React.PointerEvent<HTMLDivElement>) => {
+  // =========================================================================
+  // CORNER RESIZE DOT (MindMeister bottom-right circular grip)
+  // =========================================================================
+  const handlePointerDownCornerResize = (e: React.PointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
     e.preventDefault();
 
@@ -116,17 +116,17 @@ export function MindMapNodeComponent({
     };
   };
 
-  const handlePointerMoveResize = (e: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerMoveCornerResize = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isResizing) return;
     e.stopPropagation();
     e.preventDefault();
 
     const deltaX = e.clientX - resizeStartRef.current.startX;
-    const newWidth = Math.max(160, Math.min(880, resizeStartRef.current.initialWidth + deltaX));
+    const newWidth = Math.max(140, Math.min(900, resizeStartRef.current.initialWidth + deltaX));
     setCurrentWidth(newWidth);
   };
 
-  const handlePointerUpResize = (e: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerUpCornerResize = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isResizing) return;
     e.stopPropagation();
     e.preventDefault();
@@ -139,17 +139,16 @@ export function MindMapNodeComponent({
 
     setIsResizing(false);
     const deltaX = e.clientX - resizeStartRef.current.startX;
-    const finalWidth = Math.max(160, Math.min(880, resizeStartRef.current.initialWidth + deltaX));
+    const finalWidth = Math.max(140, Math.min(900, resizeStartRef.current.initialWidth + deltaX));
 
     if (data.onUpdateNodeWidth) {
       data.onUpdateNodeWidth(id, finalWidth);
     }
   };
 
-  const nodeColor = data.color || "#6366f1";
+  const nodeColor = data.color || "#0084ff";
   const isRoot = data.isRoot || !data.parentId;
   const childCount = data.childCount || 0;
-  const hiddenCount = data.hiddenSubtreeCount || childCount;
   const hasChildren = childCount > 0 || Boolean(data.collapsed);
 
   const fontClass = getFontClass(data.fontFamily || (data.canvasFont as string));
@@ -160,25 +159,49 @@ export function MindMapNodeComponent({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onDoubleClick={() => setIsEditing(true)}
-      className={`group relative rounded-xl border transition-all duration-150 select-none ${fontClass} ${
+      className={`group relative rounded-2xl transition-all duration-150 select-none ${fontClass} ${
         data.isDropTarget
           ? "ring-4 ring-primary ring-offset-2 ring-offset-background scale-105 shadow-xl"
           : ""
       } ${
         selected
-          ? "border-primary ring-2 ring-primary/40 shadow-lg dark:shadow-[0_0_20px_rgba(99,102,241,0.3)]"
-          : "border-border/80 bg-card hover:border-primary/50 hover:shadow-md"
+          ? "border-2 shadow-lg bg-card"
+          : "border-2 hover:shadow-md bg-card"
       } ${
         isRoot
-          ? "p-4 bg-gradient-to-br from-card to-muted/40 font-bold"
-          : "p-3 bg-card text-foreground"
+          ? "p-4 text-center font-bold"
+          : "p-2.5 text-foreground"
       } ${isResizing ? "ring-2 ring-primary ring-offset-1" : ""}`}
       style={{
         width: `${currentWidth}px`,
-        borderLeftColor: nodeColor,
-        borderLeftWidth: isRoot ? "6px" : "4px",
+        borderColor: selected ? nodeColor : isHovered ? nodeColor : "var(--border)",
       }}
     >
+      {/* Floating Contextual Toolbar above Node (MindMeister Style) */}
+      <FloatingNodeToolbar
+        nodeId={id}
+        selected={Boolean(selected)}
+        data={{
+          text: data.text,
+          description: data.description,
+          color: data.color,
+          isRoot: data.isRoot,
+          childCount: data.childCount,
+          collapsed: data.collapsed,
+          imageUrl: data.imageUrl,
+          linkUrl: data.linkUrl,
+          fontFamily: data.fontFamily,
+          fontSize: data.fontSize,
+          fontStyle: data.fontStyle,
+          textAlign: data.textAlign,
+        }}
+        onUpdate={(updates) => data.onUpdateNodeData?.(id, updates)}
+        onAddChild={(dir) => data.onAddChild?.(id, dir)}
+        onToggleCollapse={() => data.onToggleCollapse?.(id)}
+        onDelete={() => data.onDeleteNode?.(id)}
+        onDuplicate={() => data.onDuplicateNode?.(id)}
+      />
+
       {/* Target Handles */}
       <Handle
         type="target"
@@ -192,64 +215,64 @@ export function MindMapNodeComponent({
       />
 
       {/* Header Row: Emoji Icon + Title */}
-      <div className="flex items-start gap-2">
+      <div className="flex items-center gap-2">
         {data.icon && (
-          <span className="text-base shrink-0 select-none mt-0.5" role="img" aria-label="node icon">
+          <span className="text-base shrink-0 select-none" role="img" aria-label="node icon">
             {data.icon}
           </span>
         )}
 
         <div className="flex-1 min-w-0">
           {isEditing ? (
-            <div className="space-y-1">
-              <input
-                ref={inputRef}
-                value={editText}
-                onChange={(e) => setEditText(e.target.value)}
-                onBlur={handleFinishEditing}
-                onKeyDown={handleKeyDown}
-                className="w-full bg-background border border-primary rounded-md px-1.5 py-0.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
+            <input
+              ref={inputRef}
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onBlur={handleFinishEditing}
+              onKeyDown={handleKeyDown}
+              className="w-full bg-background border border-primary rounded-md px-1.5 py-0.5 text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            />
           ) : (
-            <div className="space-y-0.5">
-              <h4
-                className={`tracking-tight text-foreground break-words ${
-                  data.fontSize === "2xl"
-                    ? "text-lg font-bold"
-                    : data.fontSize === "xl"
-                    ? "text-base font-bold"
-                    : data.fontSize === "lg"
-                    ? "text-sm font-semibold"
-                    : isRoot
-                    ? "text-sm font-bold"
-                    : "text-xs font-semibold leading-snug"
-                } ${data.fontStyle === "italic" ? "italic" : ""} ${
-                  data.textAlign === "center" ? "text-center" : data.textAlign === "right" ? "text-right" : "text-left"
-                }`}
-              >
-                {data.text || "Untitled"}
-              </h4>
-            </div>
+            <h4
+              className={`tracking-tight text-foreground break-words ${
+                data.fontSize === "2xl"
+                  ? "text-lg font-bold"
+                  : data.fontSize === "xl"
+                  ? "text-base font-bold"
+                  : data.fontSize === "lg"
+                  ? "text-sm font-semibold"
+                  : isRoot
+                  ? "text-base font-bold"
+                  : "text-xs font-medium leading-snug"
+              } ${data.fontStyle === "italic" ? "italic" : ""} ${
+                data.textAlign === "center" || isRoot
+                  ? "text-center"
+                  : data.textAlign === "right"
+                  ? "text-right"
+                  : "text-left"
+              }`}
+            >
+              {data.text || "Untitled"}
+            </h4>
           )}
         </div>
       </div>
 
       {/* ORIGINAL SIZE IMAGE ATTACHMENT: Resizes dynamically with the whole box */}
       {data.imageUrl && (
-        <div className="mt-2.5 w-full rounded-lg overflow-hidden border border-border/70 bg-muted/10 pointer-events-none">
+        <div className="mt-2 w-full rounded-xl overflow-hidden border border-border/60 bg-muted/10 pointer-events-none">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={data.imageUrl}
             alt="attachment"
-            className="w-full h-auto object-contain block rounded-lg max-h-[500px]"
+            className="w-full h-auto object-contain block rounded-xl max-h-[500px]"
           />
         </div>
       )}
 
       {/* Video Attachment (Embed or Native) */}
       {data.videoUrl && (
-        <div className="mt-2.5 w-full rounded-lg overflow-hidden border border-border/70 bg-black/10">
+        <div className="mt-2 w-full rounded-xl overflow-hidden border border-border/60 bg-black/10">
           {parsedVideo?.type === "youtube" && parsedVideo.embedUrl ? (
             <div className="aspect-video w-full">
               <iframe
@@ -269,7 +292,7 @@ export function MindMapNodeComponent({
               />
             </div>
           ) : (
-            <video src={data.videoUrl} controls className="w-full h-auto max-h-[400px] rounded-lg" />
+            <video src={data.videoUrl} controls className="w-full h-auto max-h-[400px] rounded-xl" />
           )}
         </div>
       )}
@@ -287,7 +310,7 @@ export function MindMapNodeComponent({
 
       {/* External File / Link Chip */}
       {data.linkUrl && (
-        <div className="pt-1.5">
+        <div className="pt-1">
           <a
             href={data.linkUrl}
             target="_blank"
@@ -297,84 +320,94 @@ export function MindMapNodeComponent({
             title={data.linkUrl}
           >
             <Link2 className="h-2.5 w-2.5 shrink-0" />
-            <span className="truncate">{data.linkLabel || "Attached Link"}</span>
+            <span className="truncate">{data.linkLabel || data.linkUrl}</span>
             <ExternalLink className="h-2 w-2 shrink-0 opacity-70" />
           </a>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* 1. MINDMEISTER COLLAPSE / EXPAND TOGGLE (on right edge)                   */}
+      {/* 1. MINDMEISTER RESIZE CORNER DOT (Exact bottom-right corner dot)          */}
+      {/* ========================================================================= */}
+      {selected && (
+        <div
+          onPointerDown={handlePointerDownCornerResize}
+          onPointerMove={handlePointerMoveCornerResize}
+          onPointerUp={handlePointerUpCornerResize}
+          className="nodrag nopan absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border-2 bg-white dark:bg-card cursor-nwse-resize z-30 shadow-xs hover:scale-150 active:scale-125 transition-transform"
+          style={{ borderColor: nodeColor }}
+          title="Drag this corner dot to resize box and image"
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. MINDMEISTER COLLAPSE / EXPAND RING DOT (On branch connector line)     */}
       {/* ========================================================================= */}
       {hasChildren && (
-        <button
-          type="button"
+        <div
           onClick={(e) => {
             e.stopPropagation();
             data.onToggleCollapse?.(id);
           }}
-          className={`nodrag nopan absolute -right-3.5 top-1/2 -translate-y-1/2 rounded-full border shadow-sm flex items-center justify-center transition-all z-30 ${
-            data.collapsed
-              ? "h-6 px-1.5 bg-primary text-primary-foreground border-primary shadow-md font-bold text-[10px] gap-0.5 hover:scale-110 active:scale-95"
-              : "h-5 w-5 bg-background text-muted-foreground hover:text-foreground hover:border-primary border-border hover:scale-110 active:scale-95"
-          }`}
-          title={
-            data.collapsed
-              ? `Expand branch (${hiddenCount} hidden ${hiddenCount === 1 ? "idea" : "ideas"})`
-              : "Collapse branch"
-          }
+          className="nodrag nopan group/dot absolute -right-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 bg-white dark:bg-card cursor-pointer hover:scale-125 transition-transform flex items-center justify-center shadow-xs z-30"
+          style={{ borderColor: nodeColor }}
         >
-          {data.collapsed ? (
-            <>
-              <Plus className="h-3 w-3 shrink-0 stroke-[2.5]" />
-              <span className="text-[9px] font-bold leading-none pr-0.5">{hiddenCount}</span>
-            </>
-          ) : (
-            <Minus className="h-3 w-3 shrink-0 stroke-[2.5]" />
+          {/* Inner solid dot if collapsed (Image 3), hollow if expanded (Image 2) */}
+          {data.collapsed && (
+            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: nodeColor }} />
           )}
-        </button>
+
+          {/* Tooltip (Collapse / Expand) */}
+          <div className="absolute top-[calc(100%+4px)] left-1/2 -translate-x-1/2 opacity-0 group-hover/dot:opacity-100 transition-opacity pointer-events-none bg-[#2d3139] text-white text-[11px] font-medium px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-50">
+            {data.collapsed ? "Expand" : "Collapse"}
+          </div>
+        </div>
       )}
 
       {/* ========================================================================= */}
-      {/* 2. "+" BUTTON FOR QUICK CHILD CREATION (Bottom-Right)                     */}
+      {/* 3. MINDMEISTER PLUS (+) BUTTON & SHORTCUT HINTS (Exact match to Image 1) */}
       {/* ========================================================================= */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          data.onAddChild?.(id, "right");
-        }}
-        className={`nodrag nopan absolute -right-2 -bottom-2.5 h-6 w-6 rounded-full bg-primary text-primary-foreground shadow-md hover:scale-110 active:scale-95 flex items-center justify-center transition-all z-30 ${
-          isHovered && !data.collapsed ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"
-        }`}
-        title="Add child sub-topic (Tab)"
-      >
-        <Plus className="h-3.5 w-3.5" />
-      </button>
+      {(selected || isHovered) && (
+        <div className="nodrag nopan absolute -right-8 top-1/2 -translate-y-1/2 flex items-center gap-2 z-30">
+          {/* Plus Circle Button */}
+          <div className="group/plus relative">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onAddChild?.(id, "right");
+              }}
+              className="w-6 h-6 rounded-full text-white flex items-center justify-center shadow-md cursor-pointer hover:scale-110 active:scale-95 transition-transform"
+              style={{ backgroundColor: nodeColor }}
+            >
+              <Plus className="h-4 w-4 stroke-[2.5]" />
+            </button>
 
-      {/* ========================================================================= */}
-      {/* 3. RIGHT-EDGE RESIZE HANDLE (Canva / MindMeister Smooth Width Adjustment) */}
-      {/* ========================================================================= */}
-      <div
-        onPointerDown={handlePointerDownResize}
-        onPointerMove={handlePointerMoveResize}
-        onPointerUp={handlePointerUpResize}
-        className={`nodrag nopan absolute -right-1.5 top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center z-40 transition-opacity ${
-          selected || isHovered || isResizing ? "opacity-100" : "opacity-0 hover:opacity-100"
-        }`}
-        title="Drag right edge to resize node box and image"
-      >
-        {/* Visual Grip Pill */}
-        <div
-          className={`w-1.5 h-8 rounded-full transition-all shadow-sm ${
-            isResizing
-              ? "bg-primary w-2 h-10 ring-2 ring-primary/40 shadow-md"
-              : selected
-              ? "bg-primary/80 hover:bg-primary hover:h-10 hover:w-2"
-              : "bg-muted-foreground/40 hover:bg-primary hover:h-10 hover:w-2"
-          }`}
-        />
-      </div>
+            {/* "Add child" Tooltip */}
+            <div className="absolute top-[calc(100%+4px)] left-1/2 -translate-x-1/2 opacity-0 group-hover/plus:opacity-100 transition-opacity pointer-events-none bg-[#2d3139] text-white text-[11px] font-medium px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-50">
+              Add child
+            </div>
+          </div>
+
+          {/* Keyboard Hint Badges (Image 1 & 3) */}
+          {selected && (
+            <div className="flex flex-col gap-1 pointer-events-none select-none shrink-0 whitespace-nowrap pl-1 animate-in fade-in duration-150">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="px-1.5 py-0.5 rounded-md border border-border bg-card shadow-xs font-semibold text-[10px] text-foreground">
+                  Tab
+                </span>
+                <span>to create child</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="px-1.5 py-0.5 rounded-md border border-border bg-card shadow-xs font-semibold text-[10px] text-foreground">
+                  Enter
+                </span>
+                <span>to create sibling</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Source Handles */}
       <Handle

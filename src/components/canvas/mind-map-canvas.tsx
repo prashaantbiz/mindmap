@@ -392,6 +392,80 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     [nodes, edges, recordHistory, setNodes, triggerAutosave]
   );
 
+  const handleUpdateNodeData = React.useCallback(
+    (nodeId: string, updates: Record<string, unknown>) => {
+      const nextNodes = nodes.map((n) =>
+        n.id === nodeId
+          ? {
+              ...n,
+              data: {
+                ...n.data,
+                ...updates,
+              },
+            }
+          : n
+      );
+
+      let nextEdges = edges;
+      if (updates.color) {
+        nextEdges = edges.map((e) =>
+          e.source === nodeId ? { ...e, data: { ...e.data, color: updates.color } } : e
+        );
+      }
+
+      recordHistory(nodes, edges);
+      setNodes(nextNodes);
+      setEdges(nextEdges);
+      triggerAutosave(nextNodes, nextEdges);
+    },
+    [nodes, edges, recordHistory, setNodes, setEdges, triggerAutosave]
+  );
+
+  const handleDuplicateNode = React.useCallback(
+    (nodeId: string) => {
+      const source = nodes.find((n) => n.id === nodeId);
+      if (!source) return;
+
+      const newId = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const newNode: Node<MindMapNodeData> = {
+        ...source,
+        id: newId,
+        position: {
+          x: source.position.x + 40,
+          y: source.position.y + 60,
+        },
+        data: {
+          ...source.data,
+          text: `${source.data.text} (Copy)`,
+          isRoot: false,
+        },
+      };
+
+      let newEdge: Edge | null = null;
+      if (source.data.parentId) {
+        newEdge = {
+          id: `edge_${source.data.parentId}_${newId}`,
+          source: source.data.parentId,
+          target: newId,
+          type: "mindMap",
+          data: { color: source.data.color || "#0084ff" },
+          animated: true,
+        };
+      }
+
+      const nextNodes = [...nodes, newNode];
+      const nextEdges = newEdge ? [...edges, newEdge] : edges;
+
+      recordHistory(nodes, edges);
+      setNodes(nextNodes);
+      setEdges(nextEdges);
+      setSelectedNodeId(newId);
+      triggerAutosave(nextNodes, nextEdges);
+      toast.success("Node duplicated");
+    },
+    [nodes, edges, recordHistory, setNodes, setEdges, triggerAutosave]
+  );
+
   const handleRecolor = React.useCallback(
     (nodeIdOrColor: string, newColor?: string) => {
       const color = newColor || nodeIdOrColor;
@@ -627,6 +701,9 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
           onUpdateText: (nodeId: string, text: string, desc?: string) =>
             handleUpdateNodeText(nodeId, text, desc),
           onUpdateNodeWidth: handleUpdateNodeWidth,
+          onUpdateNodeData: handleUpdateNodeData,
+          onDeleteNode: (nodeId: string) => handleDeleteSelected(nodeId),
+          onDuplicateNode: (nodeId: string) => handleDuplicateNode(nodeId),
           onOpenInspector: (nodeId: string) => setSelectedNodeId(nodeId),
         },
       };
@@ -654,6 +731,9 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     handleToggleCollapse,
     handleUpdateNodeText,
     handleUpdateNodeWidth,
+    handleUpdateNodeData,
+    handleDeleteSelected,
+    handleDuplicateNode,
   ]);
 
   const selectedNode = React.useMemo(() => {
