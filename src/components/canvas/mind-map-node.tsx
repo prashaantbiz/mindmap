@@ -236,9 +236,13 @@ export function MindMapNodeComponent({
               rows={1}
               value={editText}
               onChange={(e) => {
-                setEditText(e.target.value);
+                const val = e.target.value;
+                setEditText(val);
                 e.target.style.height = "auto";
                 e.target.style.height = `${e.target.scrollHeight}px`;
+                if (data.onUpdateText && val.trim()) {
+                  data.onUpdateText(id, val.trim(), editDesc.trim() || undefined);
+                }
               }}
               onBlur={handleFinishEditing}
               onKeyDown={handleKeyDown}

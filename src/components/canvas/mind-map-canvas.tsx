@@ -117,9 +117,13 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
   const [historyCounts, setHistoryCounts] = React.useState({ undoCount: 0, redoCount: 0 });
   const isUndoRedoAction = React.useRef(false);
 
-  // Debounced Autosave Timer
+  // Pending Save Tracker & Debounced Autosave Timer
   const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const isInitialLoad = React.useRef(true);
+  const pendingSaveRef = React.useRef<{
+    nodes: Node<MindMapNodeData>[];
+    edges: Edge[];
+  } | null>(null);
 
   // Update history state tracker
   const recordHistory = React.useCallback(
@@ -131,7 +135,96 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     []
   );
 
-  // 1. Initial Load from Database
+  // Helper: Build API & Local Storage Payload
+  const prepareSavePayload = React.useCallback(
+    (currentNodes: Node<MindMapNodeData>[], currentEdges: Edge[]) => {
+      const payloadNodes = currentNodes.map((n) => {
+        const attachmentsPayload = JSON.stringify({
+          customWidth: n.data.customWidth || null,
+          fontFamily: n.data.fontFamily || null,
+          fontSize: n.data.fontSize || null,
+          fontStyle: n.data.fontStyle || null,
+          textAlign: n.data.textAlign || null,
+        });
+
+        return {
+          id: n.id,
+          parentId: n.data.parentId || null,
+          text: n.data.text || "Untitled",
+          description: n.data.description || null,
+          icon: n.data.icon || null,
+          color: n.data.color || "#0084ff",
+          positionX: n.position.x,
+          positionY: n.position.y,
+          collapsed: Boolean(n.data.collapsed),
+          isRoot: Boolean(n.data.isRoot),
+          imageUrl: n.data.imageUrl || null,
+          videoUrl: n.data.videoUrl || null,
+          linkUrl: n.data.linkUrl || null,
+          linkLabel: n.data.linkLabel || null,
+          attachments: attachmentsPayload,
+        };
+      });
+
+      const payloadEdges = currentEdges.map((e) => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        color: (e.data as any)?.color || "#0084ff",
+        animated: Boolean(e.animated),
+      }));
+
+      return { nodes: payloadNodes, edges: payloadEdges };
+    },
+    []
+  );
+
+  // Direct Execution of Canvas Save
+  const executeSave = React.useCallback(
+    async (currentNodes: Node<MindMapNodeData>[], currentEdges: Edge[]) => {
+      if (isInitialLoad.current) return;
+
+      const { nodes: payloadNodes, edges: payloadEdges } = prepareSavePayload(
+        currentNodes,
+        currentEdges
+      );
+
+      // Instant local backup
+      try {
+        localStorage.setItem(
+          `mindmap_backup_${projectId}`,
+          JSON.stringify({
+            nodes: payloadNodes,
+            edges: payloadEdges,
+            timestamp: Date.now(),
+          })
+        );
+      } catch {}
+
+      try {
+        const res = await fetch(`/api/projects/${projectId}/nodes`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nodes: payloadNodes, edges: payloadEdges }),
+          keepalive: true,
+        });
+
+        if (res.ok) {
+          setSaveStatus("saved");
+          setLastSavedAt(new Date());
+          pendingSaveRef.current = null;
+        } else {
+          setSaveStatus("unsaved");
+        }
+      } catch (err) {
+        console.error("Autosave HTTP error:", err);
+        setSaveStatus("unsaved");
+      }
+    },
+    [projectId, prepareSavePayload]
+  );
+
+  // 1. Initial Load from Database with LocalStorage Fallback
   React.useEffect(() => {
     async function loadCanvas() {
       try {
@@ -141,18 +234,39 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
 
         setProject(data.project);
 
-        const initialNodes: Node<MindMapNodeData>[] = (data.nodes || []).map((n: any) => {
+        let serverNodes = data.nodes || [];
+        let serverEdges = data.edges || [];
+
+        // Check if browser has a more recent local backup
+        try {
+          const rawBackup = localStorage.getItem(`mindmap_backup_${projectId}`);
+          if (rawBackup) {
+            const backup = JSON.parse(rawBackup);
+            if (backup.nodes && backup.nodes.length > 0) {
+              const serverUpdatedAt = data.project?.updatedAt
+                ? new Date(data.project.updatedAt).getTime()
+                : 0;
+              if (backup.timestamp && backup.timestamp > serverUpdatedAt) {
+                serverNodes = backup.nodes;
+                serverEdges = backup.edges;
+              }
+            }
+          }
+        } catch {}
+
+        const initialNodes: Node<MindMapNodeData>[] = serverNodes.map((n: any) => {
           let extra: any = {};
           if (n.attachments) {
             try {
-              extra = typeof n.attachments === "string" ? JSON.parse(n.attachments) : n.attachments;
+              extra =
+                typeof n.attachments === "string" ? JSON.parse(n.attachments) : n.attachments;
             } catch {}
           }
 
           return {
             id: n.id,
             type: "mindMap",
-            position: { x: n.positionX ?? 0, y: n.positionY ?? 0 },
+            position: { x: n.positionX ?? n.position?.x ?? 0, y: n.positionY ?? n.position?.y ?? 0 },
             data: {
               text: n.text,
               description: n.description,
@@ -175,7 +289,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
           };
         });
 
-        const initialEdges: Edge[] = (data.edges || []).map((e: any) => ({
+        const initialEdges: Edge[] = serverEdges.map((e: any) => ({
           id: e.id,
           source: e.source,
           target: e.target,
@@ -198,72 +312,65 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     loadCanvas();
   }, [projectId, setNodes, setEdges]);
 
-  // 2. Debounced Autosave to Database
+  // 2. Realtime Debounced Autosave Trigger
   const triggerAutosave = React.useCallback(
     (currentNodes: Node<MindMapNodeData>[], currentEdges: Edge[]) => {
       if (isInitialLoad.current) return;
 
+      pendingSaveRef.current = { nodes: currentNodes, edges: currentEdges };
       setSaveStatus("saving");
+
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
 
-      saveTimeoutRef.current = setTimeout(async () => {
-        try {
-          const payloadNodes = currentNodes.map((n) => {
-            const attachmentsPayload = JSON.stringify({
-              customWidth: n.data.customWidth || null,
-              fontFamily: n.data.fontFamily || null,
-              fontSize: n.data.fontSize || null,
-              fontStyle: n.data.fontStyle || null,
-              textAlign: n.data.textAlign || null,
-            });
-
-            return {
-              id: n.id,
-              parentId: n.data.parentId || null,
-              text: n.data.text || "Untitled",
-              description: n.data.description || null,
-              icon: n.data.icon || null,
-              color: n.data.color || "#0084ff",
-              positionX: n.position.x,
-              positionY: n.position.y,
-              collapsed: Boolean(n.data.collapsed),
-              isRoot: Boolean(n.data.isRoot),
-              imageUrl: n.data.imageUrl || null,
-              videoUrl: n.data.videoUrl || null,
-              linkUrl: n.data.linkUrl || null,
-              linkLabel: n.data.linkLabel || null,
-              attachments: attachmentsPayload,
-            };
-          });
-
-          const payloadEdges = currentEdges.map((e) => ({
-            id: e.id,
-            source: e.source,
-            target: e.target,
-            color: (e.data as any)?.color || "#0084ff",
-            animated: Boolean(e.animated),
-          }));
-
-          const res = await fetch(`/api/projects/${projectId}/nodes`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ nodes: payloadNodes, edges: payloadEdges }),
-          });
-
-          if (res.ok) {
-            setSaveStatus("saved");
-            setLastSavedAt(new Date());
-          }
-        } catch (err) {
-          console.error("Autosave error:", err);
-          setSaveStatus("unsaved");
-        }
-      }, 800);
+      saveTimeoutRef.current = setTimeout(() => {
+        executeSave(currentNodes, currentEdges);
+      }, 250);
     },
-    [projectId]
+    [executeSave]
   );
+
+  // 3. Unload & Unmount Page Protection Listener
+  React.useEffect(() => {
+    const flushPendingChanges = () => {
+      if (!pendingSaveRef.current || isInitialLoad.current) return;
+      const { nodes: currentNodes, edges: currentEdges } = pendingSaveRef.current;
+      const { nodes: payloadNodes, edges: payloadEdges } = prepareSavePayload(
+        currentNodes,
+        currentEdges
+      );
+
+      try {
+        localStorage.setItem(
+          `mindmap_backup_${projectId}`,
+          JSON.stringify({
+            nodes: payloadNodes,
+            edges: payloadEdges,
+            timestamp: Date.now(),
+          })
+        );
+      } catch {}
+
+      try {
+        fetch(`/api/projects/${projectId}/nodes`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nodes: payloadNodes, edges: payloadEdges }),
+          keepalive: true,
+        });
+      } catch {}
+    };
+
+    window.addEventListener("beforeunload", flushPendingChanges);
+    window.addEventListener("pagehide", flushPendingChanges);
+
+    return () => {
+      flushPendingChanges();
+      window.removeEventListener("beforeunload", flushPendingChanges);
+      window.removeEventListener("pagehide", flushPendingChanges);
+    };
+  }, [projectId, prepareSavePayload]);
 
   // 3. Update Node Box Width via Corner / Edge Dragging
   const handleUpdateNodeWidth = React.useCallback(

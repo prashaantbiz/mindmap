@@ -110,6 +110,8 @@ export interface StoredVerificationToken {
 declare global {
   // eslint-disable-next-line no-var
   var __inMemoryDevStore: DevDataStore | undefined;
+  // eslint-disable-next-line no-var
+  var __devStoreLastMtime: number | undefined;
 }
 
 interface DevDataStore {
@@ -132,53 +134,105 @@ const getStorePath = () => {
   }
 };
 
-function readDevStore(): DevDataStore {
-  if (global.__inMemoryDevStore) {
-    return global.__inMemoryDevStore;
-  }
-  try {
-    const storePath = getStorePath();
-    if (fs.existsSync(storePath)) {
-      const data = fs.readFileSync(storePath, "utf-8");
-      const parsed: DevDataStore = JSON.parse(data);
-      parsed.projects = (parsed.projects || []).map((p: StoredProject) => ({
+function sanitizeStore(store: Partial<DevDataStore>): DevDataStore {
+  return {
+    users: (store.users || []).filter((u) => Boolean(u && typeof u === "object" && u.id)),
+    projects: (store.projects || [])
+      .filter((p) => Boolean(p && typeof p === "object" && p.id && p.userId))
+      .map((p: StoredProject) => ({
         id: p.id,
         title: p.title || "Untitled Mind Map",
         description: p.description || null,
         thumbnailUrl: p.thumbnailUrl || null,
         nodeCount: p.nodeCount || 1,
         folder: p.folder || "Personal",
-        tags: p.tags || ["Ideas"],
-        isArchived: p.isArchived ?? false,
-        isDefault: p.isDefault ?? false,
+        tags: Array.isArray(p.tags) ? p.tags : [],
+        isArchived: Boolean(p.isArchived),
+        isDefault: Boolean(p.isDefault),
         userId: p.userId,
         createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
         updatedAt: p.updatedAt ? new Date(p.updatedAt) : new Date(),
-      }));
-      parsed.mindMapNodes = parsed.mindMapNodes || [];
-      parsed.mindMapEdges = parsed.mindMapEdges || [];
-      parsed.projectShares = parsed.projectShares || [];
-      global.__inMemoryDevStore = parsed;
-      return parsed;
+      })),
+    mindMapNodes: (store.mindMapNodes || []).filter((n) => Boolean(n && typeof n === "object" && n.id && n.projectId)),
+    mindMapEdges: (store.mindMapEdges || []).filter((e) => Boolean(e && typeof e === "object" && e.id && e.projectId)),
+    projectShares: (store.projectShares || []).filter((s) => Boolean(s && typeof s === "object" && s.id && s.projectId)),
+    verificationTokens: (store.verificationTokens || []).filter((t) => Boolean(t && typeof t === "object" && t.token)),
+  };
+}
+
+function readDevStore(): DevDataStore {
+  const storePath = getStorePath();
+  try {
+    if (fs.existsSync(storePath)) {
+      const stat = fs.statSync(storePath);
+      // Return memory cache ONLY if disk file has NOT been modified since our last read/write
+      if (
+        global.__inMemoryDevStore &&
+        global.__devStoreLastMtime &&
+        stat.mtimeMs <= global.__devStoreLastMtime
+      ) {
+        return sanitizeStore(global.__inMemoryDevStore);
+      }
+
+      // Re-read file from disk if uninitialized or modified on disk
+      const data = fs.readFileSync(storePath, "utf-8");
+      const parsed: DevDataStore = JSON.parse(data);
+      const sanitized = sanitizeStore(parsed);
+
+      global.__inMemoryDevStore = sanitized;
+      global.__devStoreLastMtime = stat.mtimeMs;
+      return sanitized;
     }
   } catch (err: unknown) {
     console.warn("Could not read local dev store:", err);
   }
-  const initialStore: DevDataStore = { users: [], projects: [], mindMapNodes: [], mindMapEdges: [], projectShares: [], verificationTokens: [] };
+
+  if (global.__inMemoryDevStore) {
+    return sanitizeStore(global.__inMemoryDevStore);
+  }
+
+  const initialStore: DevDataStore = sanitizeStore({
+    users: [],
+    projects: [],
+    mindMapNodes: [],
+    mindMapEdges: [],
+    projectShares: [],
+    verificationTokens: [],
+  });
   global.__inMemoryDevStore = initialStore;
+  global.__devStoreLastMtime = Date.now();
   return initialStore;
 }
 
 function writeDevStore(data: DevDataStore) {
-  global.__inMemoryDevStore = data;
+  const sanitized = sanitizeStore(data);
+  global.__inMemoryDevStore = sanitized;
+  const storePath = getStorePath();
+  const jsonContent = JSON.stringify(sanitized, null, 2);
   try {
-    const storePath = getStorePath();
-    fs.writeFileSync(storePath, JSON.stringify(data, null, 2), "utf-8");
+    const dir = path.dirname(storePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const tempPath = `${storePath}.tmp.${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    fs.writeFileSync(tempPath, jsonContent, "utf-8");
+    fs.renameSync(tempPath, storePath);
+
+    if (fs.existsSync(storePath)) {
+      global.__devStoreLastMtime = fs.statSync(storePath).mtimeMs;
+    }
   } catch {
     try {
-      const fallbackPath = path.join("/tmp", ".dev-db-store.json");
-      fs.writeFileSync(fallbackPath, JSON.stringify(data, null, 2), "utf-8");
-    } catch {}
+      fs.writeFileSync(storePath, jsonContent, "utf-8");
+      if (fs.existsSync(storePath)) {
+        global.__devStoreLastMtime = fs.statSync(storePath).mtimeMs;
+      }
+    } catch {
+      try {
+        const fallbackPath = path.join("/tmp", ".dev-db-store.json");
+        fs.writeFileSync(fallbackPath, jsonContent, "utf-8");
+      } catch {}
+    }
   }
 }
 
@@ -194,11 +248,12 @@ export const db = {
       const store = readDevStore();
       const found = store.users.find(
         (u: StoredUser) =>
-          (where.email && u.email?.toLowerCase() === where.email.toLowerCase()) ||
-          (where.id && u.id === where.id)
+          u &&
+          ((where.email && u.email?.toLowerCase() === where.email.toLowerCase()) ||
+            (where.id && u.id === where.id))
       );
       if (!found) return null;
-      const projects = store.projects.filter((p: StoredProject) => p.userId === found.id);
+      const projects = store.projects.filter((p: StoredProject) => p && p.userId === found.id);
       return { ...found, projects };
     },
 
@@ -234,7 +289,7 @@ export const db = {
       } catch {}
       const store = readDevStore();
       const index = store.users.findIndex(
-        (u: StoredUser) => (where.id && u.id === where.id) || (where.email && u.email === where.email)
+        (u: StoredUser) => u && ((where.id && u.id === where.id) || (where.email && u.email === where.email))
       );
       if (index === -1) throw new Error("User not found in local store");
       store.users[index] = { ...store.users[index], ...data, updatedAt: new Date() };
@@ -251,16 +306,16 @@ export const db = {
       } catch {}
       const store = readDevStore();
       const user = store.users.find(
-        (u: StoredUser) => (where.id && u.id === where.id) || (where.email && u.email === where.email)
+        (u: StoredUser) => u && ((where.id && u.id === where.id) || (where.email && u.email === where.email))
       );
       if (user) {
-        store.users = store.users.filter((u: StoredUser) => u.id !== user.id);
-        const userProjects = store.projects.filter((p: StoredProject) => p.userId === user.id);
+        store.users = store.users.filter((u: StoredUser) => u && u.id !== user.id);
+        const userProjects = store.projects.filter((p: StoredProject) => p && p.userId === user.id);
         const userProjectIds = new Set(userProjects.map((p: StoredProject) => p.id));
-        store.projects = store.projects.filter((p: StoredProject) => p.userId !== user.id);
-        store.mindMapNodes = store.mindMapNodes.filter((n: StoredMindMapNode) => !userProjectIds.has(n.projectId));
-        store.mindMapEdges = store.mindMapEdges.filter((e: StoredMindMapEdge) => !userProjectIds.has(e.projectId));
-        store.projectShares = store.projectShares.filter((s: StoredProjectShare) => !userProjectIds.has(s.projectId));
+        store.projects = store.projects.filter((p: StoredProject) => p && p.userId !== user.id);
+        store.mindMapNodes = store.mindMapNodes.filter((n: StoredMindMapNode) => n && !userProjectIds.has(n.projectId));
+        store.mindMapEdges = store.mindMapEdges.filter((e: StoredMindMapEdge) => e && !userProjectIds.has(e.projectId));
+        store.projectShares = store.projectShares.filter((s: StoredProjectShare) => s && !userProjectIds.has(s.projectId));
         writeDevStore(store);
       }
       return user || null;
@@ -268,43 +323,45 @@ export const db = {
   },
 
   project: {
-    async findMany({
-      where,
-      orderBy,
-    }: {
-      where: {
-        userId: string;
+    async findMany(params: {
+      where?: {
+        userId?: string;
         isArchived?: boolean;
         folder?: string;
         title?: { contains?: string; mode?: string };
       };
       orderBy?: { [key: string]: "asc" | "desc" };
+      userId?: string;
     }): Promise<StoredProject[]> {
+      const whereClause = params?.where || params || {};
+      const targetUserId = whereClause.userId;
+      const orderBy = params?.orderBy;
+
       try {
         if (prisma) {
-          const projects = await prisma.project.findMany({ where: where as Prisma.ProjectWhereInput, orderBy: orderBy as Prisma.ProjectOrderByWithRelationInput });
+          const projects = await prisma.project.findMany({ where: whereClause as Prisma.ProjectWhereInput, orderBy: orderBy as Prisma.ProjectOrderByWithRelationInput });
           return projects as unknown as StoredProject[];
         }
       } catch {}
       const store = readDevStore();
-      let projects = store.projects.filter((p: StoredProject) => p.userId === where.userId);
+      let projects = store.projects.filter((p: StoredProject) => p && (!targetUserId || p.userId === targetUserId));
 
-      if (where.isArchived !== undefined) {
-        projects = projects.filter((p: StoredProject) => p.isArchived === where.isArchived);
+      if (whereClause.isArchived !== undefined) {
+        projects = projects.filter((p: StoredProject) => p && p.isArchived === whereClause.isArchived);
       }
-      if (where.folder) {
-        projects = projects.filter((p: StoredProject) => p.folder === where.folder);
+      if (whereClause.folder) {
+        projects = projects.filter((p: StoredProject) => p && p.folder === whereClause.folder);
       }
-      if (where.title?.contains) {
-        const query = where.title.contains.toLowerCase();
-        projects = projects.filter((p: StoredProject) => p.title.toLowerCase().includes(query));
+      if (whereClause.title?.contains) {
+        const query = whereClause.title.contains.toLowerCase();
+        projects = projects.filter((p: StoredProject) => p && p.title && p.title.toLowerCase().includes(query));
       }
 
       if (orderBy) {
         const [field, dir] = Object.entries(orderBy)[0] as [keyof StoredProject, "asc" | "desc"];
         projects.sort((a, b) => {
-          const aVal = a[field] ?? "";
-          const bVal = b[field] ?? "";
+          const aVal = a?.[field] ?? "";
+          const bVal = b?.[field] ?? "";
           if (aVal < bVal) return dir === "asc" ? -1 : 1;
           if (aVal > bVal) return dir === "asc" ? 1 : -1;
           return 0;
