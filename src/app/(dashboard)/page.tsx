@@ -82,12 +82,40 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error("Failed to fetch mind maps");
 
       const data = await res.json();
-      const fetchedProjects = data.projects || [];
-      setProjects(fetchedProjects);
-      if (data.folders) setAvailableFolders(data.folders);
-      if (data.stats) setStats(data.stats);
+      let fetchedProjects: ProjectData[] = data.projects || [];
 
-      // Cache projects locally
+      // Merge with browser local storage to preserve created mind maps across Vercel serverless container resets
+      try {
+        const cached = localStorage.getItem("mindmap_cached_projects");
+        if (cached) {
+          const parsed: ProjectData[] = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const serverProjectIds = new Set(fetchedProjects.map((p) => p.id));
+            const extraLocalProjects = parsed.filter(
+              (p) => p && p.id && !serverProjectIds.has(p.id) && !p.isArchived
+            );
+            if (extraLocalProjects.length > 0) {
+              fetchedProjects = [...fetchedProjects, ...extraLocalProjects];
+            }
+          }
+        }
+      } catch {}
+
+      setProjects(fetchedProjects);
+      if (data.folders) {
+        const allFolders = Array.from(
+          new Set([...data.folders, ...fetchedProjects.map((p) => p.folder).filter(Boolean) as string[]])
+        );
+        setAvailableFolders(allFolders);
+      }
+      if (data.stats) {
+        setStats({
+          ...data.stats,
+          total: fetchedProjects.length,
+        });
+      }
+
+      // Cache merged projects list locally
       if (fetchedProjects.length > 0) {
         try {
           localStorage.setItem("mindmap_cached_projects", JSON.stringify(fetchedProjects));
