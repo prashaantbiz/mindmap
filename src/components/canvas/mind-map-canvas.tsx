@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   ReactFlow,
   Background,
@@ -231,14 +232,58 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     [projectId, prepareSavePayload]
   );
 
+  const [notFound, setNotFound] = React.useState(false);
+
   // 1. Initial Load from Database with LocalStorage Fallback
   React.useEffect(() => {
     async function loadCanvas() {
       try {
         const res = await fetch(`/api/projects/${projectId}/nodes`);
-        if (!res.ok) throw new Error("Failed to load project canvas");
-        const data = await res.json();
+        if (!res.ok) {
+          // Attempt local backup recovery first
+          try {
+            const rawBackup = localStorage.getItem(`mindmap_backup_${projectId}`);
+            if (rawBackup) {
+              const backup = JSON.parse(rawBackup);
+              if (backup.nodes && Array.isArray(backup.nodes) && backup.nodes.length > 0) {
+                const initialNodes: Node<MindMapNodeData>[] = backup.nodes.map((n: any) => ({
+                  id: n.id,
+                  type: "mindMap",
+                  position: { x: n.positionX ?? n.position?.x ?? 0, y: n.positionY ?? n.position?.y ?? 0 },
+                  data: {
+                    text: n.text ?? n.data?.text ?? "Untitled",
+                    description: n.description ?? n.data?.description ?? null,
+                    icon: n.icon ?? n.data?.icon ?? null,
+                    color: n.color || n.data?.color || "#0084ff",
+                    parentId: n.parentId ?? n.data?.parentId ?? null,
+                    collapsed: Boolean(n.collapsed ?? n.data?.collapsed),
+                    isRoot: Boolean(n.isRoot ?? n.data?.isRoot),
+                  },
+                }));
+                const initialEdges: Edge[] = (backup.edges || []).map((e: any) => ({
+                  id: e.id,
+                  source: e.source,
+                  target: e.target,
+                  type: "mindMap",
+                  data: { color: e.color || e.data?.color || "#0084ff" },
+                  animated: Boolean(e.animated),
+                }));
 
+                setNodes(initialNodes);
+                setEdges(initialEdges);
+                setProject({ id: projectId, title: "Restored Mind Map" });
+                isInitialLoad.current = false;
+                setSaveStatus("saved");
+                return;
+              }
+            }
+          } catch {}
+
+          setNotFound(true);
+          return;
+        }
+
+        const data = await res.json();
         setProject(data.project);
 
         let serverNodes = data.nodes || [];
@@ -1143,6 +1188,25 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
   const selectedNode = React.useMemo(() => {
     return nodes.find((n) => n.id === selectedNodeId || n.selected) || null;
   }, [nodes, selectedNodeId]);
+
+  if (notFound) {
+    return (
+      <div className="w-screen h-screen flex flex-col items-center justify-center bg-background p-6 text-center space-y-4">
+        <div className="h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center mx-auto text-2xl shadow-lg">
+          💡
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-xl font-bold text-foreground">Mind Map Not Found</h2>
+          <p className="text-xs text-muted-foreground max-w-sm mx-auto leading-relaxed">
+            This mind map is unavailable on your active account or was created under a different device without cloud database sync.
+          </p>
+        </div>
+        <Button asChild variant="glow" size="sm" className="font-semibold rounded-xl">
+          <Link href="/">Back to My Workspace</Link>
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div
