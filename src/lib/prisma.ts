@@ -35,6 +35,26 @@ function getPrismaClient(): PrismaClient | null {
 
 export const prisma = getPrismaClient();
 
+let isPrismaAvailable = true;
+
+function canUsePrisma(): boolean {
+  return Boolean(prisma && isPrismaAvailable);
+}
+
+function handlePrismaError(err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (
+    msg.includes("P1001") ||
+    msg.includes("P1002") ||
+    msg.includes("Can't reach database") ||
+    msg.includes("ECONNREFUSED") ||
+    msg.includes("ETIMEDOUT") ||
+    msg.includes("PrismaClientInitializationError")
+  ) {
+    isPrismaAvailable = false;
+  }
+}
+
 // Resilient DB layer providing both PostgreSQL Prisma execution and local dev fallback
 export interface StoredUser {
   id: string;
@@ -243,11 +263,13 @@ export const db = {
   user: {
     async findUnique({ where }: { where: { email?: string; id?: string } }): Promise<(StoredUser & { projects?: StoredProject[] }) | null> {
       try {
-        if (prisma) {
-          const user = await prisma.user.findUnique({ where: where as Prisma.UserWhereUniqueInput, include: { projects: true } });
+        if (canUsePrisma()) {
+          const user = await prisma!.user.findUnique({ where: where as Prisma.UserWhereUniqueInput, include: { projects: true } });
           if (user) return user as unknown as StoredUser & { projects: StoredProject[] };
         }
-      } catch {}
+      } catch (err) {
+        handlePrismaError(err);
+      }
       const store = readDevStore();
       const found = store.users.find(
         (u: StoredUser) =>
@@ -262,11 +284,13 @@ export const db = {
 
     async create({ data }: { data: { name?: string | null; email?: string | null; emailVerified?: Date | null; image?: string | null; passwordHash?: string | null } }): Promise<StoredUser> {
       try {
-        if (prisma) {
-          const created = await prisma.user.create({ data: data as Prisma.UserCreateInput });
+        if (canUsePrisma()) {
+          const created = await prisma!.user.create({ data: data as Prisma.UserCreateInput });
           return created as unknown as StoredUser;
         }
-      } catch {}
+      } catch (err) {
+        handlePrismaError(err);
+      }
       const store = readDevStore();
       const newUser: StoredUser = {
         id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -285,11 +309,13 @@ export const db = {
 
     async update({ where, data }: { where: { id?: string; email?: string }; data: Partial<StoredUser> }): Promise<StoredUser> {
       try {
-        if (prisma) {
-          const updated = await prisma.user.update({ where: where as Prisma.UserWhereUniqueInput, data: data as Prisma.UserUpdateInput });
+        if (canUsePrisma()) {
+          const updated = await prisma!.user.update({ where: where as Prisma.UserWhereUniqueInput, data: data as Prisma.UserUpdateInput });
           return updated as unknown as StoredUser;
         }
-      } catch {}
+      } catch (err) {
+        handlePrismaError(err);
+      }
       const store = readDevStore();
       const index = store.users.findIndex(
         (u: StoredUser) => u && ((where.id && u.id === where.id) || (where.email && u.email === where.email))
@@ -302,11 +328,13 @@ export const db = {
 
     async delete({ where }: { where: { id?: string; email?: string } }): Promise<StoredUser | null> {
       try {
-        if (prisma) {
-          const deleted = await prisma.user.delete({ where: where as Prisma.UserWhereUniqueInput });
+        if (canUsePrisma()) {
+          const deleted = await prisma!.user.delete({ where: where as Prisma.UserWhereUniqueInput });
           return deleted as unknown as StoredUser;
         }
-      } catch {}
+      } catch (err) {
+        handlePrismaError(err);
+      }
       const store = readDevStore();
       const user = store.users.find(
         (u: StoredUser) => u && ((where.id && u.id === where.id) || (where.email && u.email === where.email))
@@ -347,14 +375,16 @@ export const db = {
       const orderBy = params?.orderBy;
 
       try {
-        if (prisma) {
-          const projects = await prisma.project.findMany({
+        if (canUsePrisma()) {
+          const projects = await prisma!.project.findMany({
             where: rawWhere as Prisma.ProjectWhereInput,
             orderBy: orderBy as Prisma.ProjectOrderByWithRelationInput,
           });
           return projects as unknown as StoredProject[];
         }
-      } catch {}
+      } catch (err) {
+        handlePrismaError(err);
+      }
       const store = readDevStore();
       let projects = store.projects.filter((p: StoredProject) => p && (!targetUserId || p.userId === targetUserId));
 
@@ -385,22 +415,26 @@ export const db = {
 
     async findUnique({ where }: { where: { id: string } }): Promise<StoredProject | null> {
       try {
-        if (prisma) {
-          const project = await prisma.project.findUnique({ where: where as Prisma.ProjectWhereUniqueInput });
+        if (canUsePrisma()) {
+          const project = await prisma!.project.findUnique({ where: where as Prisma.ProjectWhereUniqueInput });
           return project as unknown as StoredProject;
         }
-      } catch {}
+      } catch (err) {
+        handlePrismaError(err);
+      }
       const store = readDevStore();
       return store.projects.find((p: StoredProject) => p.id === where.id) || null;
     },
 
     async create({ data }: { data: { title: string; description?: string | null; thumbnailUrl?: string | null; nodeCount?: number; folder?: string | null; tags?: string[]; isArchived?: boolean; isDefault?: boolean; userId: string } }): Promise<StoredProject> {
       try {
-        if (prisma) {
-          const created = await prisma.project.create({ data: data as Prisma.ProjectUncheckedCreateInput });
+        if (canUsePrisma()) {
+          const created = await prisma!.project.create({ data: data as Prisma.ProjectUncheckedCreateInput });
           return created as unknown as StoredProject;
         }
-      } catch {}
+      } catch (err) {
+        handlePrismaError(err);
+      }
       const store = readDevStore();
       const newProj: StoredProject = {
         id: `proj_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -417,17 +451,114 @@ export const db = {
         updatedAt: new Date(),
       };
       store.projects.push(newProj);
+
+      // Pre-initialize template nodes so project canvas is instantly persisted to disk
+      let templateKey = "blank";
+      const lowerTags = (data.tags || []).map((t: string) => t.toLowerCase());
+      if (lowerTags.includes("system-architecture") || lowerTags.includes("architecture")) templateKey = "system-architecture";
+      else if (lowerTags.includes("ai-pipeline") || lowerTags.includes("ai")) templateKey = "ai-pipeline";
+      else if (lowerTags.includes("engineering-roadmap") || lowerTags.includes("roadmap") || lowerTags.includes("sprint")) templateKey = "engineering-roadmap";
+      else if (lowerTags.includes("product-growth") || lowerTags.includes("gtm") || lowerTags.includes("growth")) templateKey = "product-growth";
+      else if (lowerTags.includes("consultation-process") || lowerTags.includes("consultation") || lowerTags.includes("strategy") || lowerTags.includes("meeting")) templateKey = "consultation-process";
+      else if (lowerTags.includes("design-system") || lowerTags.includes("design") || lowerTags.includes("ux")) templateKey = "design-system";
+      else if (lowerTags.includes("brainstorm")) templateKey = "product-growth";
+
+      const templateData = getTemplateById(templateKey);
+      const rootId = `node_${Date.now()}_root`;
+      const rootText = data.title && !data.title.startsWith("Untitled") ? data.title : templateData.rootNode.text;
+      const rootNode: StoredMindMapNode = {
+        id: rootId,
+        projectId: newProj.id,
+        parentId: null,
+        text: rootText,
+        description: templateData.rootNode.desc || "Root concept of your mind map",
+        icon: templateData.rootNode.icon || "💡",
+        color: templateData.rootNode.color || "#0084ff",
+        positionX: 0,
+        positionY: 0,
+        collapsed: false,
+        isRoot: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      store.mindMapNodes.push(rootNode);
+
+      templateData.branches.forEach((b, i) => {
+        const childId = `node_${Date.now()}_${i}`;
+        store.mindMapNodes.push({
+          id: childId,
+          projectId: newProj.id,
+          parentId: rootId,
+          text: b.text,
+          description: b.desc || null,
+          icon: b.icon || null,
+          color: b.color,
+          positionX: b.x,
+          positionY: b.y,
+          collapsed: false,
+          isRoot: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        store.mindMapEdges.push({
+          id: `edge_${rootId}_${childId}`,
+          projectId: newProj.id,
+          source: rootId,
+          target: childId,
+          color: b.color,
+          animated: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        (b.subs || []).forEach((sub, j) => {
+          const subId = `node_${Date.now()}_${i}_${j}`;
+          const subX = b.x > 0 ? b.x + 240 : b.x - 240;
+          const subY = b.y + (j === 0 ? -45 : j === 1 ? 0 : 45);
+
+          store.mindMapNodes.push({
+            id: subId,
+            projectId: newProj.id,
+            parentId: childId,
+            text: sub.text,
+            description: sub.desc || null,
+            icon: null,
+            color: b.color,
+            positionX: subX,
+            positionY: subY,
+            collapsed: false,
+            isRoot: false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+
+          store.mindMapEdges.push({
+            id: `edge_${childId}_${subId}`,
+            projectId: newProj.id,
+            source: childId,
+            target: subId,
+            color: b.color,
+            animated: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        });
+      });
+
       writeDevStore(store);
       return newProj;
     },
 
     async update({ where, data }: { where: { id: string }; data: Partial<StoredProject> }): Promise<StoredProject> {
       try {
-        if (prisma) {
-          const updated = await prisma.project.update({ where: where as Prisma.ProjectWhereUniqueInput, data: { ...data, updatedAt: new Date() } as Prisma.ProjectUpdateInput });
+        if (canUsePrisma()) {
+          const updated = await prisma!.project.update({ where: where as Prisma.ProjectWhereUniqueInput, data: { ...data, updatedAt: new Date() } as Prisma.ProjectUpdateInput });
           return updated as unknown as StoredProject;
         }
-      } catch {}
+      } catch (err) {
+        handlePrismaError(err);
+      }
       const store = readDevStore();
       const index = store.projects.findIndex((p: StoredProject) => p.id === where.id);
       if (index === -1) throw new Error("Project not found");
@@ -442,11 +573,13 @@ export const db = {
 
     async delete({ where }: { where: { id: string } }): Promise<StoredProject | null> {
       try {
-        if (prisma) {
-          const deleted = await prisma.project.delete({ where: where as Prisma.ProjectWhereUniqueInput });
+        if (canUsePrisma()) {
+          const deleted = await prisma!.project.delete({ where: where as Prisma.ProjectWhereUniqueInput });
           return deleted as unknown as StoredProject;
         }
-      } catch {}
+      } catch (err) {
+        handlePrismaError(err);
+      }
       const store = readDevStore();
       const found = store.projects.find((p: StoredProject) => p.id === where.id);
       store.projects = store.projects.filter((p: StoredProject) => p.id !== where.id);
@@ -462,13 +595,13 @@ export const db = {
       const templateData = getTemplateById(template);
 
       try {
-        if (prisma) {
-          let nodes = await prisma.mindMapNode.findMany({ where: { projectId } });
-          let edges = await prisma.mindMapEdge.findMany({ where: { projectId } });
+        if (canUsePrisma()) {
+          let nodes = await prisma!.mindMapNode.findMany({ where: { projectId } });
+          let edges = await prisma!.mindMapEdge.findMany({ where: { projectId } });
 
           if (nodes.length === 0) {
             const rootText = projectTitle && !projectTitle.startsWith("Untitled") ? projectTitle : templateData.rootNode.text;
-            const root = await prisma.mindMapNode.create({
+            const root = await prisma!.mindMapNode.create({
               data: {
                 projectId,
                 parentId: null,
@@ -484,7 +617,7 @@ export const db = {
             });
 
             for (const b of templateData.branches) {
-              const child = await prisma.mindMapNode.create({
+              const child = await prisma!.mindMapNode.create({
                 data: {
                   projectId,
                   parentId: root.id,
@@ -499,7 +632,7 @@ export const db = {
                 },
               });
 
-              await prisma.mindMapEdge.create({
+              await prisma!.mindMapEdge.create({
                 data: {
                   projectId,
                   source: root.id,
@@ -515,7 +648,7 @@ export const db = {
                 const subX = b.x > 0 ? b.x + 240 : b.x - 240;
                 const subY = b.y + (j === 0 ? -45 : j === 1 ? 0 : 45);
 
-                const subChild = await prisma.mindMapNode.create({
+                const subChild = await prisma!.mindMapNode.create({
                   data: {
                     projectId,
                     parentId: child.id,
@@ -530,7 +663,7 @@ export const db = {
                   },
                 });
 
-                await prisma.mindMapEdge.create({
+                await prisma!.mindMapEdge.create({
                   data: {
                     projectId,
                     source: child.id,
@@ -542,13 +675,15 @@ export const db = {
               }
             }
 
-            nodes = await prisma.mindMapNode.findMany({ where: { projectId } });
-            edges = await prisma.mindMapEdge.findMany({ where: { projectId } });
+            nodes = await prisma!.mindMapNode.findMany({ where: { projectId } });
+            edges = await prisma!.mindMapEdge.findMany({ where: { projectId } });
           }
 
           return { nodes: nodes as unknown as StoredMindMapNode[], edges: edges as unknown as StoredMindMapEdge[] };
         }
-      } catch {}
+      } catch (err) {
+        handlePrismaError(err);
+      }
 
       const store = readDevStore();
       let nodes = store.mindMapNodes.filter((n: StoredMindMapNode) => n.projectId === projectId);
@@ -674,12 +809,12 @@ export const db = {
       }>
     ): Promise<{ success: boolean; count: number }> {
       try {
-        if (prisma) {
-          await prisma.mindMapEdge.deleteMany({ where: { projectId } });
-          await prisma.mindMapNode.deleteMany({ where: { projectId } });
+        if (canUsePrisma()) {
+          await prisma!.mindMapEdge.deleteMany({ where: { projectId } });
+          await prisma!.mindMapNode.deleteMany({ where: { projectId } });
 
           for (const n of nodes) {
-            await prisma.mindMapNode.create({
+            await prisma!.mindMapNode.create({
               data: {
                 id: n.id,
                 projectId,
@@ -702,7 +837,7 @@ export const db = {
           }
 
           for (const e of edges) {
-            await prisma.mindMapEdge.create({
+            await prisma!.mindMapEdge.create({
               data: {
                 id: e.id,
                 projectId,
@@ -714,7 +849,7 @@ export const db = {
             });
           }
 
-          await prisma.project.update({
+          await prisma!.project.update({
             where: { id: projectId },
             data: {
               nodeCount: nodes.length,
@@ -724,7 +859,9 @@ export const db = {
 
           return { success: true, count: nodes.length };
         }
-      } catch {}
+      } catch (err) {
+        handlePrismaError(err);
+      }
 
       const store = readDevStore();
       store.mindMapNodes = store.mindMapNodes.filter((n: StoredMindMapNode) => n.projectId !== projectId);

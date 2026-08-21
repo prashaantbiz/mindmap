@@ -213,18 +213,27 @@ export async function getOrCreateAuthenticatedUser(sessionUser: {
   image?: string | null;
   id?: string | null;
 }): Promise<StoredUser | null> {
-  if (!sessionUser?.email) return null;
-  const normalizedEmail = sessionUser.email.toLowerCase().trim();
+  if (!sessionUser?.email && !sessionUser?.id) return null;
+  const normalizedEmail = sessionUser.email ? sessionUser.email.toLowerCase().trim() : "";
 
-  let user = await db.user.findUnique({
-    where: { email: normalizedEmail },
-  });
+  let user: StoredUser | null = null;
+  if (sessionUser.id) {
+    user = await db.user.findUnique({
+      where: { id: sessionUser.id },
+    });
+  }
+
+  if (!user && normalizedEmail) {
+    user = await db.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+  }
 
   if (!user) {
     user = await db.user.create({
       data: {
-        name: sessionUser.name || normalizedEmail.split("@")[0],
-        email: normalizedEmail,
+        name: sessionUser.name || normalizedEmail.split("@")[0] || "User",
+        email: normalizedEmail || null,
         image: sessionUser.image || `https://api.dicebear.com/7.x/initials/svg?seed=${sessionUser.name || "User"}`,
         emailVerified: new Date(),
       },
