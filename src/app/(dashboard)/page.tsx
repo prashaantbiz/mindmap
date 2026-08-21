@@ -57,8 +57,19 @@ export default function DashboardPage() {
   const [deleteModalOpen, setDeleteModalOpen] = React.useState(false);
   const [targetProject, setTargetProject] = React.useState<ProjectData | null>(null);
 
-  // Fetch projects from API
+  // Fetch projects from API with local cache fallback
   const fetchProjects = React.useCallback(async () => {
+    // Read local cache immediately to prevent flash of empty state
+    try {
+      const cached = localStorage.getItem("mindmap_cached_projects");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setProjects(parsed);
+        }
+      }
+    } catch {}
+
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -71,12 +82,29 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error("Failed to fetch mind maps");
 
       const data = await res.json();
-      setProjects(data.projects || []);
+      const fetchedProjects = data.projects || [];
+      setProjects(fetchedProjects);
       if (data.folders) setAvailableFolders(data.folders);
       if (data.stats) setStats(data.stats);
+
+      // Cache projects locally
+      if (fetchedProjects.length > 0) {
+        try {
+          localStorage.setItem("mindmap_cached_projects", JSON.stringify(fetchedProjects));
+        } catch {}
+      }
     } catch (err) {
       console.error("Error loading projects:", err);
-      toast.error("Failed to load mind maps");
+      // Restore from local cache if network or API error occurs
+      try {
+        const cached = localStorage.getItem("mindmap_cached_projects");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setProjects(parsed);
+          }
+        }
+      } catch {}
     } finally {
       setLoading(false);
     }

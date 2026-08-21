@@ -128,7 +128,7 @@ interface DevDataStore {
 
 const getStorePath = () => {
   try {
-    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === "production") {
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
       return path.join("/tmp", ".dev-db-store.json");
     }
     return path.join(process.cwd(), ".dev-db-store.json");

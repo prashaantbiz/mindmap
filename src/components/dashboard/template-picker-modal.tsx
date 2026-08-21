@@ -128,6 +128,17 @@ export function TemplatePickerModal({
         return;
       }
 
+      if (data.project) {
+        try {
+          const cached = localStorage.getItem("mindmap_cached_projects");
+          const list = cached ? JSON.parse(cached) : [];
+          if (!list.some((p: any) => p.id === data.project.id)) {
+            list.unshift(data.project);
+            localStorage.setItem("mindmap_cached_projects", JSON.stringify(list));
+          }
+        } catch {}
+      }
+
       toast.success("Mind map created!", {
         description: `Opening "${data.project.title}" in ${selectedFolder}...`,
       });

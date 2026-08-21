@@ -893,72 +893,19 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
   );
 
   const onNodeDrag = React.useCallback(
-    (_: any, node: Node) => {
-      const overlapNode = nodes.find(
-        (n) =>
-          n.id !== node.id &&
-          Math.abs(n.position.x - node.position.x) < 90 &&
-          Math.abs(n.position.y - node.position.y) < 60
-      );
-
-      // Prevent dropping on own descendant
-      if (overlapNode) {
-        const descendants = getSubtreeDescendants(node.id);
-        if (descendants.includes(overlapNode.id)) {
-          setDragOverNodeId(null);
-          return;
-        }
-      }
-
-      setDragOverNodeId(overlapNode ? overlapNode.id : null);
+    (_: any, _node: Node) => {
+      // Automatic reparenting disabled per design requirements
+      setDragOverNodeId(null);
     },
-    [nodes, getSubtreeDescendants]
+    []
   );
 
   const onNodeDragStop = React.useCallback(
-    (_: any, node: Node) => {
-      if (dragOverNodeId && dragOverNodeId !== node.id) {
-        const newParent = nodes.find((n) => n.id === dragOverNodeId);
-        const descendants = getSubtreeDescendants(node.id);
-
-        if (newParent && !node.data.isRoot && !descendants.includes(newParent.id)) {
-          const nextNodes = nodes.map((n) =>
-            n.id === node.id
-              ? {
-                  ...n,
-                  data: {
-                    ...n.data,
-                    parentId: newParent.id,
-                    color: newParent.data.color || n.data.color,
-                  },
-                }
-              : n
-          );
-
-          const filteredEdges = edges.filter((e) => e.target !== node.id);
-          const newEdge: Edge = {
-            id: `edge_${newParent.id}_${node.id}`,
-            source: newParent.id,
-            target: node.id,
-            type: "mindMap",
-            data: { color: newParent.data.color || "#0084ff" },
-            animated: true,
-          };
-
-          const nextEdges = [...filteredEdges, newEdge];
-
-          recordHistory(nodes, edges);
-          setNodes(nextNodes);
-          setEdges(nextEdges);
-          triggerAutosave(nextNodes, nextEdges);
-          toast.success(`Reparented under "${newParent.data.text}"`);
-        }
-      } else {
-        triggerAutosave(nodes, edges);
-      }
+    (_: any, _node: Node) => {
+      triggerAutosave(currentNodesRef.current, currentEdgesRef.current);
       setDragOverNodeId(null);
     },
-    [dragOverNodeId, nodes, edges, getSubtreeDescendants, recordHistory, setNodes, setEdges, triggerAutosave]
+    [triggerAutosave]
   );
 
   // 7. Undo / Redo
@@ -1063,6 +1010,10 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
         e.preventDefault();
         setSelectedNodeId(null);
         setContextMenuState((prev) => ({ ...prev, isOpen: false }));
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        executeSave(currentNodesRef.current, currentEdgesRef.current);
+        toast.success("Mind map saved!");
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) {
