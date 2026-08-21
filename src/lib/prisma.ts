@@ -19,6 +19,9 @@ declare global {
 
 function getPrismaClient(): PrismaClient | null {
   try {
+    if (!process.env.DATABASE_URL || process.env.DATABASE_URL.trim() === "") {
+      return null;
+    }
     if (global.prismaGlobal) return global.prismaGlobal;
     const client = new PrismaClient();
     if (process.env.NODE_ENV !== "production") {
@@ -323,7 +326,7 @@ export const db = {
   },
 
   project: {
-    async findMany(params: {
+    async findMany(params?: {
       where?: {
         userId?: string;
         isArchived?: boolean;
@@ -332,28 +335,37 @@ export const db = {
       };
       orderBy?: { [key: string]: "asc" | "desc" };
       userId?: string;
+      isArchived?: boolean;
+      folder?: string;
+      title?: { contains?: string; mode?: string };
     }): Promise<StoredProject[]> {
-      const whereClause = params?.where || params || {};
-      const targetUserId = whereClause.userId;
+      const rawWhere = params?.where || params || {};
+      const targetUserId = rawWhere.userId;
+      const isArchived = rawWhere.isArchived;
+      const folder = rawWhere.folder;
+      const titleContains = rawWhere.title?.contains;
       const orderBy = params?.orderBy;
 
       try {
         if (prisma) {
-          const projects = await prisma.project.findMany({ where: whereClause as Prisma.ProjectWhereInput, orderBy: orderBy as Prisma.ProjectOrderByWithRelationInput });
+          const projects = await prisma.project.findMany({
+            where: rawWhere as Prisma.ProjectWhereInput,
+            orderBy: orderBy as Prisma.ProjectOrderByWithRelationInput,
+          });
           return projects as unknown as StoredProject[];
         }
       } catch {}
       const store = readDevStore();
       let projects = store.projects.filter((p: StoredProject) => p && (!targetUserId || p.userId === targetUserId));
 
-      if (whereClause.isArchived !== undefined) {
-        projects = projects.filter((p: StoredProject) => p && p.isArchived === whereClause.isArchived);
+      if (isArchived !== undefined) {
+        projects = projects.filter((p: StoredProject) => p && p.isArchived === isArchived);
       }
-      if (whereClause.folder) {
-        projects = projects.filter((p: StoredProject) => p && p.folder === whereClause.folder);
+      if (folder) {
+        projects = projects.filter((p: StoredProject) => p && p.folder === folder);
       }
-      if (whereClause.title?.contains) {
-        const query = whereClause.title.contains.toLowerCase();
+      if (titleContains) {
+        const query = titleContains.toLowerCase();
         projects = projects.filter((p: StoredProject) => p && p.title && p.title.toLowerCase().includes(query));
       }
 

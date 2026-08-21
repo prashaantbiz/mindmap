@@ -124,6 +124,13 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     nodes: Node<MindMapNodeData>[];
     edges: Edge[];
   } | null>(null);
+  const currentNodesRef = React.useRef(nodes);
+  const currentEdgesRef = React.useRef(edges);
+
+  React.useEffect(() => {
+    currentNodesRef.current = nodes;
+    currentEdgesRef.current = edges;
+  }, [nodes, edges]);
 
   // Update history state tracker
   const recordHistory = React.useCallback(
@@ -237,18 +244,21 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
         let serverNodes = data.nodes || [];
         let serverEdges = data.edges || [];
 
-        // Check if browser has a more recent local backup
+        // Check if browser has a valid, newer local backup
         try {
           const rawBackup = localStorage.getItem(`mindmap_backup_${projectId}`);
           if (rawBackup) {
             const backup = JSON.parse(rawBackup);
-            if (backup.nodes && backup.nodes.length > 0) {
+            if (backup.nodes && Array.isArray(backup.nodes) && backup.nodes.length > 0) {
               const serverUpdatedAt = data.project?.updatedAt
                 ? new Date(data.project.updatedAt).getTime()
                 : 0;
-              if (backup.timestamp && backup.timestamp > serverUpdatedAt) {
+              if (
+                serverNodes.length === 0 ||
+                (backup.timestamp && serverUpdatedAt > 0 && backup.timestamp > serverUpdatedAt + 2000)
+              ) {
                 serverNodes = backup.nodes;
-                serverEdges = backup.edges;
+                serverEdges = backup.edges || [];
               }
             }
           }
@@ -268,22 +278,22 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
             type: "mindMap",
             position: { x: n.positionX ?? n.position?.x ?? 0, y: n.positionY ?? n.position?.y ?? 0 },
             data: {
-              text: n.text,
-              description: n.description,
-              icon: n.icon,
-              color: n.color || "#0084ff",
-              parentId: n.parentId,
-              collapsed: n.collapsed,
-              isRoot: n.isRoot,
-              imageUrl: n.imageUrl || null,
-              videoUrl: n.videoUrl || null,
-              linkUrl: n.linkUrl || null,
-              linkLabel: n.linkLabel || null,
-              customWidth: extra.customWidth ?? n.customWidth ?? null,
-              fontFamily: extra.fontFamily ?? n.fontFamily ?? null,
-              fontSize: extra.fontSize ?? n.fontSize ?? null,
-              fontStyle: extra.fontStyle ?? n.fontStyle ?? null,
-              textAlign: extra.textAlign ?? n.textAlign ?? null,
+              text: n.text ?? n.data?.text ?? "Untitled",
+              description: n.description ?? n.data?.description ?? null,
+              icon: n.icon ?? n.data?.icon ?? null,
+              color: n.color || n.data?.color || "#0084ff",
+              parentId: n.parentId ?? n.data?.parentId ?? null,
+              collapsed: Boolean(n.collapsed ?? n.data?.collapsed),
+              isRoot: Boolean(n.isRoot ?? n.data?.isRoot),
+              imageUrl: n.imageUrl ?? n.data?.imageUrl ?? null,
+              videoUrl: n.videoUrl ?? n.data?.videoUrl ?? null,
+              linkUrl: n.linkUrl ?? n.data?.linkUrl ?? null,
+              linkLabel: n.linkLabel ?? n.data?.linkLabel ?? null,
+              customWidth: extra.customWidth ?? n.customWidth ?? n.data?.customWidth ?? null,
+              fontFamily: extra.fontFamily ?? n.fontFamily ?? n.data?.fontFamily ?? null,
+              fontSize: extra.fontSize ?? n.fontSize ?? n.data?.fontSize ?? null,
+              fontStyle: extra.fontStyle ?? n.fontStyle ?? n.data?.fontStyle ?? null,
+              textAlign: extra.textAlign ?? n.textAlign ?? n.data?.textAlign ?? null,
               attachments: n.attachments || null,
             },
           };
@@ -294,8 +304,8 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
           source: e.source,
           target: e.target,
           type: "mindMap",
-          data: { color: e.color || "#0084ff" },
-          animated: e.animated,
+          data: { color: e.color || e.data?.color || "#0084ff" },
+          animated: Boolean(e.animated),
         }));
 
         setNodes(initialNodes);
@@ -331,11 +341,19 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
     [executeSave]
   );
 
-  // 3. Unload & Unmount Page Protection Listener
+  // 3. Unload & Unmount Page Protection Listener (Flushes pending & in-flight changes on unmount/navigation)
   React.useEffect(() => {
     const flushPendingChanges = () => {
-      if (!pendingSaveRef.current || isInitialLoad.current) return;
-      const { nodes: currentNodes, edges: currentEdges } = pendingSaveRef.current;
+      if (isInitialLoad.current) return;
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+
+      const currentNodes = currentNodesRef.current;
+      const currentEdges = currentEdgesRef.current;
+      if (!currentNodes || currentNodes.length === 0) return;
+
       const { nodes: payloadNodes, edges: payloadEdges } = prepareSavePayload(
         currentNodes,
         currentEdges
@@ -359,6 +377,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
           body: JSON.stringify({ nodes: payloadNodes, edges: payloadEdges }),
           keepalive: true,
         });
+        pendingSaveRef.current = null;
       } catch {}
     };
 
@@ -844,10 +863,33 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
           }
         });
 
+        const hasSaveableChange = changes.some(
+          (c) => c.type === "position" || c.type === "remove" || c.type === "dimensions"
+        );
+        if (hasSaveableChange) {
+          triggerAutosave(updatedNodes, currentEdgesRef.current);
+        }
+
         return updatedNodes;
       });
     },
-    [getSubtreeDescendants, setNodes]
+    [getSubtreeDescendants, setNodes, triggerAutosave]
+  );
+
+  const handleEdgesChange = React.useCallback(
+    (changes: any) => {
+      onEdgesChange(changes);
+      setEdges((currentEdges) => {
+        const hasSaveableChange = changes.some(
+          (c: any) => c.type === "remove" || c.type === "add" || c.type === "reset"
+        );
+        if (hasSaveableChange) {
+          triggerAutosave(currentNodesRef.current, currentEdges);
+        }
+        return currentEdges;
+      });
+    },
+    [onEdgesChange, setEdges, triggerAutosave]
   );
 
   const onNodeDrag = React.useCallback(
@@ -1186,7 +1228,7 @@ export function MindMapCanvas({ projectId }: MindMapCanvasProps) {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChangeWithSubtree}
-        onEdgesChange={onEdgesChange}
+        onEdgesChange={handleEdgesChange}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         onNodeClick={(_, node) => {
